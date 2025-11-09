@@ -151,10 +151,6 @@ class NakshaUploader:
             }
 
             # Debug output disabled to reduce console verbosity
-            # print("    DEBUG: Final payload structure:")
-            # for key, value in payload.items():
-            #     print("    DEBUG:   {}: {} ({})".format(key, value, type(value).__name__))
-            # print("    DEBUG: === END PAYLOAD ANALYSIS ===")
             print("    DEBUG: Ready to upload {} plot features".format(len(features)))
 
             json_payload = json.dumps(payload)

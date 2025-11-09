@@ -584,9 +584,9 @@ class PolygonSanitizer:
             print_info("    Simplified {} complex geometries".format(simplified_count))
 
             # Step 7: Fix geometries using ArcPy tools
-            print_info("Step 7: Fixing geometries...")
-            self._fix_geometries_simple(input_fc, verbose)
-            print_info("    Applied geometry fixes")
+            print_info("Step 7: Comprehensive geometry cleaning...")
+            self._fix_geometries_simple(input_fc, True)  # Always verbose for geometry cleaning
+            print_info("    Applied comprehensive geometry cleaning")
 
             # Step 8: Recreate soi_uniq_id GlobalID field
             print_info("Step 8: Recreating GlobalID field...")
@@ -1014,37 +1014,126 @@ class PolygonSanitizer:
             return 0
 
     def _fix_geometries_simple(self, input_fc, verbose=False):
-        """Fix geometries using ArcPy tools - simplified approach"""
+        """Comprehensive geometry cleaning using ArcPy tools"""
         try:
             import arcpy
 
             if verbose:
-                print_info("    Applying RepairGeometry...")
+                print_info("    Starting comprehensive geometry cleaning...")
 
-            # Use ArcPy RepairGeometry like reference uses tools directly
-            arcpy.management.RepairGeometry(input_fc, "DELETE_NULL")
+            print_info("    Cleaning polygons in: {}".format(input_fc))
 
-            # Remove null geometries
-            layer_name = "temp_null_removal"
-            if arcpy.Exists(layer_name):
-                arcpy.management.Delete(layer_name)
+            # Step 1: Try repairing geometry using ArcGIS tool
+            arcpy.management.RepairGeometry(input_fc)
+            print_info("    Step 1: Geometry repaired using RepairGeometry.")
 
-            arcpy.management.MakeFeatureLayer(input_fc, layer_name)
-            arcpy.management.SelectLayerByAttribute(layer_name, "NEW_SELECTION", "SHAPE IS NULL")
+            # Step 2: Iterate and validate with UpdateCursor
+            deleted = 0
+            fixed = 0
 
-            null_count = int(arcpy.GetCount_management(layer_name).getOutput(0))
-            if null_count > 0:
-                arcpy.management.DeleteFeatures(layer_name)
-                if verbose:
-                    print_info("    Removed {} null geometries".format(null_count))
+            with arcpy.da.UpdateCursor(input_fc, ["OID@", "SHAPE@"]) as cursor:
+                for oid, geom in cursor:
+                    if not geom:
+                        if verbose:
+                            print_info("    OID {}: Null geometry — deleting.".format(oid))
+                        cursor.deleteRow()
+                        deleted += 1
+                        continue
 
-            # Clean up
-            if arcpy.Exists(layer_name):
-                arcpy.management.Delete(layer_name)
+                    # Check for empty geometry - different ArcPy versions use different methods
+                    is_empty = False
+                    if hasattr(geom, 'isEmpty'):
+                        is_empty = geom.isEmpty
+                    elif hasattr(geom, 'empty'):
+                        is_empty = geom.empty
+                    else:
+                        # Fallback: use area check
+                        is_empty = geom.area == 0
+
+                    if is_empty:
+                        if verbose:
+                            print_info("    OID {}: Empty geometry — deleting.".format(oid))
+                        cursor.deleteRow()
+                        deleted += 1
+                        continue
+
+                    # Check if geometry is valid - different ArcPy versions use different methods
+                    is_valid = True
+                    if hasattr(geom, 'isValid'):
+                        is_valid = geom.isValid
+                    elif hasattr(geom, 'valid'):
+                        is_valid = geom.valid
+
+                    if not is_valid:
+                        if verbose:
+                            print_info("    OID {}: Invalid polygon — trying buffer(0) fix.".format(oid))
+                        try:
+                            repaired = geom.buffer(0)  # Common fix for self-intersecting polygons
+                            # Check if repaired geometry is valid and not empty
+                            repaired_is_empty = False
+                            if hasattr(repaired, 'isEmpty'):
+                                repaired_is_empty = repaired.isEmpty
+                            elif hasattr(repaired, 'empty'):
+                                repaired_is_empty = repaired.empty
+                            else:
+                                repaired_is_empty = repaired.area == 0
+
+                            repaired_is_valid = True
+                            if hasattr(repaired, 'isValid'):
+                                repaired_is_valid = repaired.isValid
+                            elif hasattr(repaired, 'valid'):
+                                repaired_is_valid = repaired.valid
+
+                            if repaired and repaired_is_valid and not repaired_is_empty:
+                                cursor.updateRow([oid, repaired])
+                                fixed += 1
+                                if verbose:
+                                    print_info("    OID {}: Fixed geometry with buffer(0).".format(oid))
+                            else:
+                                if verbose:
+                                    print_info("    OID {}: Still invalid after buffer(0) — deleting.".format(oid))
+                                cursor.deleteRow()
+                                deleted += 1
+                        except Exception as e:
+                            if verbose:
+                                print_info("    OID {}: Exception during fix ({}) — deleting.".format(oid, e))
+                            cursor.deleteRow()
+                            deleted += 1
+                        continue
+
+                    # Optional: check zero-area polygons and degenerate geometries
+                    if geom.area == 0:
+                        if verbose:
+                            print_info("    OID {}: Zero-area polygon — deleting.".format(oid))
+                        cursor.deleteRow()
+                        deleted += 1
+                        continue
+
+                    # Check for degenerate geometries (less than 3 vertices)
+                    part_count = getattr(geom, 'partCount', 1)
+                    total_points = 0
+                    try:
+                        for part_idx in range(part_count):
+                            part_array = geom.getPart(part_idx)
+                            if part_array:
+                                total_points += part_array.count
+                    except:
+                        total_points = 0
+
+                    if total_points < 3:
+                        if verbose:
+                            print_info("    OID {}: Degenerate polygon ({} points) — deleting.".format(oid, total_points))
+                        cursor.deleteRow()
+                        deleted += 1
+                        continue
+
+            print_info("    ✅ Geometry cleaning complete.")
+            print_info("       {} polygons repaired".format(fixed))
+            print_info("       {} polygons deleted".format(deleted))
 
         except Exception as e:
             if verbose:
-                print_info("    Geometry fixing failed: {}".format(e))
+                print_info("    Geometry cleaning failed: {}".format(e))
 
     def _fix_overlapping_pairs_iterative(self, input_fc, verbose=False, buffer_erase_cm=None):
         """Fix overlapping pairs using iterative buffer-erase approach"""
