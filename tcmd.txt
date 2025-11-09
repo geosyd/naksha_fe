@@ -7,6 +7,7 @@ python main.py stats
 
 python main.py prepare --force
 python main.py validate
+
 python main.py sanitize
 python main.py sanitize --do-overlap-fix --buffer-erase 30
 

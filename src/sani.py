@@ -921,9 +921,9 @@ class PolygonSanitizer:
 
                 if verbose:
                     print_info("    Generalization completed:")
-                    print_info("      Features preserved: {} → {}".format(original_count, simplified_count))
-                    print_info("      Complex geometries: {} → {}".format(complex_count, complex_after))
-                    print_info("      Vertex reduction: {} → {} (saved {} vertices)".format(
+                    print_info("      Features preserved: {} -> {}".format(original_count, simplified_count))
+                    print_info("      Complex geometries: {} -> {}".format(complex_count, complex_after))
+                    print_info("      Vertex reduction: {} -> {} (saved {} vertices)".format(
                         total_vertices, current_vertices, vertices_reduced))
 
                     if vertices_reduced > 0:
@@ -1127,7 +1127,7 @@ class PolygonSanitizer:
                         deleted += 1
                         continue
 
-            print_info("    ✅ Geometry cleaning complete.")
+            print_info("    Geometry cleaning complete.")
             print_info("       {} polygons repaired".format(fixed))
             print_info("       {} polygons deleted".format(deleted))
 
