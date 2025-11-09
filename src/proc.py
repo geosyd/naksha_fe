@@ -356,7 +356,7 @@ class DataWorkflows:
             return False
 
     @staticmethod
-    def process_sanitize_column(gdb_folder, count=None, buffer_erase_cm=None, skip_overlap_fix=None):
+    def process_sanitize_column(gdb_folder, count=None, buffer_erase_cm=None, do_overlap_fix=None):
         """Process sanitize all GDB files in folder"""
         try:
             print("=== PROCESS SANITIZE COLUMN ===")
@@ -413,7 +413,7 @@ class DataWorkflows:
                         continue
 
                     print("    Sanitizing PROPERTY_PARCEL feature class...")
-                    success, message, feature_count = sanitizer.sanitize_feature_class(fc_path, buffer_erase_cm=buffer_erase_cm, skip_overlap_fix=skip_overlap_fix)
+                    success, message, feature_count = sanitizer.sanitize_feature_class(fc_path, buffer_erase_cm=buffer_erase_cm, do_overlap_fix=do_overlap_fix)
 
                     if success:
                         success_count += 1

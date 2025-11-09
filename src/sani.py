@@ -514,7 +514,7 @@ class PolygonSanitizer:
             except:
                 return False
 
-    def sanitize_feature_class(self, input_fc, cluster_tolerance=0.001, verbose=False, buffer_erase_cm=None, skip_overlap_fix=None):
+    def sanitize_feature_class(self, input_fc, cluster_tolerance=0.001, verbose=False, buffer_erase_cm=None, do_overlap_fix=None):
         """
         Sanitize a feature class using simplified approach based on working reference
 
@@ -555,13 +555,13 @@ class PolygonSanitizer:
             print_info("Step 1: Skipping duplicate removal to preserve overlaps...")
 
             # Step 2: Fix overlapping pairs using iterative buffer-erase (before multipart conversion)
-            if skip_overlap_fix:
-                print_info("Step 2: Skipping overlapping pairs fixing (disabled by user)...")
-                overlap_pairs_resolved = 0
-            else:
+            if do_overlap_fix:
                 print_info("Step 2: Fixing overlapping pairs...")
                 overlap_pairs_resolved = self._fix_overlapping_pairs_iterative(input_fc, verbose, buffer_erase_cm)
                 print_info("    Resolved {} overlapping pairs".format(overlap_pairs_resolved))
+            else:
+                print_info("Step 2: Skipping overlapping pairs fixing (use --do-overlap-fix to enable)...")
+                overlap_pairs_resolved = 0
 
             # Step 3: Convert multipolygons to single polygons (always check for multipart features)
             print_info("Step 3: Converting multipolygons to single polygons...")

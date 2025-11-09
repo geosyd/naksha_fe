@@ -58,7 +58,7 @@ class CLI:
                 self.force = False
                 self.buffer_erase = None
                 self.backup_uploaded = None
-                self.skip_overlap_fix = False
+                self.do_overlap_fix = False
 
                 # Parse flags for different commands
                 i = 2
@@ -85,8 +85,8 @@ class CLI:
                     elif sys.argv[i] == '--backup-uploaded':
                         self.backup_uploaded = True
                         i += 1
-                    elif sys.argv[i] == '--skip-overlap-fix':
-                        self.skip_overlap_fix = True
+                    elif sys.argv[i] == '--do-overlap-fix':
+                        self.do_overlap_fix = True
                         i += 1
                     else:
                         i += 1
@@ -119,7 +119,7 @@ class CLI:
         print("  --buffer-erase N  Use specific buffer distance (N centimeters) for sanitize command")
         print("                   Recommended: 5-30cm for typical parcel data")
         print("  --backup-uploaded  Backup GDBs after successful upload to data/gdbs/backup (upload command)")
-        print("  --skip-overlap-fix   Skip overlapping pairs fixing in sanitize command")
+        print("  --do-overlap-fix     Perform overlapping pairs fixing in sanitize command")
         print
         print("Logging:")
         print("  All console output is logged to data/log.txt with timestamps")
@@ -133,7 +133,7 @@ class CLI:
         print("  python main.py upload")
         print("  python main.py upload --backup-uploaded  # Backup GDBs after successful upload")
         print("  python main.py sanitize")
-        print("  python main.py sanitize --skip-overlap-fix   # Skip overlap fixing")
+        print("  python main.py sanitize --do-overlap-fix     # Perform overlap fixing")
         print("  python main.py sanitize --buffer-erase 20   # Use 20cm buffer distance (recommended)")
         print("  python main.py clear              # Clear GDB files (default)")
         print("  python main.py clear --gdbs       # Clear GDB files")
@@ -560,7 +560,7 @@ class CLI:
 
         # Process sanitize column
         from src.proc import DataWorkflows
-        return DataWorkflows.process_sanitize_column(gdbs_folder, None, buffer_erase_cm=args.buffer_erase, skip_overlap_fix=args.skip_overlap_fix)
+        return DataWorkflows.process_sanitize_column(gdbs_folder, None, buffer_erase_cm=args.buffer_erase, do_overlap_fix=args.do_overlap_fix)
 
     def _run_clear(self, args):
         """Run clear command with support for --gdbs and --logs flags"""
