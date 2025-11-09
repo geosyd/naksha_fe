@@ -1,0 +1,16 @@
+- Use Python at "C:\Python27\ArcGIS10.7\python.exe"
+
+python main.py
+
+python main.py codes --state "Tamil Nadu"
+python main.py stats
+
+python main.py prepare --force
+python main.py validate
+python main.py sanitize --skip-overlap-fix --buffer-erase 30
+python main.py upload --backup-uploaded
+
+python main.py clear
+
+
+python zipdo.py
