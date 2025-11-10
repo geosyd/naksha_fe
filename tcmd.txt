@@ -9,7 +9,7 @@ python main.py prepare --force
 python main.py validate
 
 python main.py sanitize
-python main.py sanitize --do-overlap-fix --buffer-erase 30
+python main.py sanitize --remove-slivers --do-overlap-fix --buffer-erase 30
 
 python main.py upload --backup-uploaded
 python main.py clear

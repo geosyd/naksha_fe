@@ -514,7 +514,7 @@ class PolygonSanitizer:
             except:
                 return False
 
-    def sanitize_feature_class(self, input_fc, cluster_tolerance=0.001, verbose=False, buffer_erase_cm=None, do_overlap_fix=None):
+    def sanitize_feature_class(self, input_fc, cluster_tolerance=0.001, verbose=False, buffer_erase_cm=None, do_overlap_fix=None, remove_slivers=False):
         """
         Sanitize a feature class using simplified approach based on working reference
 
@@ -593,13 +593,22 @@ class PolygonSanitizer:
             globalid_fixed = self._recreate_globalid_field(input_fc, verbose)
             print_info("    GlobalID field recreation: {}".format("Success" if globalid_fixed else "Failed"))
 
-            # Step 9: Renumber plot numbers sequentially
-            print_info("Step 9: Renumbering plot numbers...")
+            # Step 9: Remove sliver polygons (if requested)
+            if remove_slivers:
+                print_info("Step 9: Removing sliver polygons...")
+                slivers_removed = self._remove_sliver_polygons(input_fc, verbose)
+                print_info("    Sliver polygons removed: {}".format(slivers_removed))
+            else:
+                print_info("Step 9: Skipping sliver removal (use --remove-slivers to enable)")
+                slivers_removed = 0
+
+            # Step 10: Renumber plot numbers sequentially
+            print_info("Step 10: Renumbering plot numbers...")
             plot_renumbered = self._renumber_plot_numbers(input_fc, verbose)
             print_info("    Plot number renumbering: {}".format("Success" if plot_renumbered else "Failed"))
 
-            # Step 10: Reset OBJECTIDs to start from 1
-            print_info("Step 10: Resetting OBJECTIDs to start from 1...")
+            # Step 11: Reset OBJECTIDs to start from 1
+            print_info("Step 11: Resetting OBJECTIDs to start from 1...")
             objectid_reset = self._reset_objectids(input_fc, verbose)
             print_info("    OBJECTID reset: {}".format("Success" if objectid_reset else "Failed"))
 
@@ -2028,6 +2037,196 @@ class PolygonSanitizer:
             if verbose:
                 print_warning("        Error extracting exterior rings: {}".format(e))
             return None
+
+    def _remove_sliver_polygons(self, input_fc, verbose=False):
+        """
+        Remove sliver polygons using ArcPy Eliminate tool
+        Slivers are small, thin polygons often created by overlay operations
+        """
+        try:
+            import arcpy
+
+            if verbose:
+                print_info("    Detecting and removing sliver polygons...")
+
+            # Set environment
+            arcpy.env.overwriteOutput = True
+            workspace = os.path.dirname(input_fc)
+
+            # Get initial feature count
+            initial_count = int(arcpy.management.GetCount(input_fc)[0])
+            if verbose:
+                print_info("      Initial feature count: {}".format(initial_count))
+
+            if initial_count == 0:
+                if verbose:
+                    print_info("      No features to process")
+                return 0
+
+            # Create temporary feature class for sliver detection
+            temp_fc = "in_memory\\temp_sliver_detection"
+            if arcpy.Exists(temp_fc):
+                arcpy.management.Delete(temp_fc)
+
+            try:
+                # Copy features to temporary feature class
+                arcpy.management.CopyFeatures(input_fc, temp_fc)
+
+                # Add field for area calculation
+                area_field = "POLY_AREA"
+                if area_field in [f.name for f in arcpy.ListFields(temp_fc)]:
+                    arcpy.management.DeleteField(temp_fc, area_field)
+
+                arcpy.management.AddField(temp_fc, area_field, "DOUBLE")
+                arcpy.management.CalculateField(temp_fc, area_field, "!shape.area@squaremeters!", "PYTHON3")
+
+                # Add field for perimeter calculation
+                perimeter_field = "POLY_PERIMETER"
+                if perimeter_field in [f.name for f in arcpy.ListFields(temp_fc)]:
+                    arcpy.management.DeleteField(temp_fc, perimeter_field)
+
+                arcpy.management.AddField(temp_fc, perimeter_field, "DOUBLE")
+                arcpy.management.CalculateField(temp_fc, perimeter_field, "!shape.length@meters!", "PYTHON3")
+
+                # Calculate shape index (perimeter²/4π*area) - circle has shape index of 1
+                # Higher values indicate more elongated shapes (slivers)
+                shape_index_field = "SHAPE_INDEX"
+                if shape_index_field in [f.name for f in arcpy.ListFields(temp_fc)]:
+                    arcpy.management.DeleteField(temp_fc, shape_index_field)
+
+                arcpy.management.AddField(temp_fc, shape_index_field, "DOUBLE")
+                expression = "(!POLY_PERIMETER! * !POLY_PERIMETER!) / (4 * 3.14159 * !POLY_AREA!) if !POLY_AREA! > 0 else 0"
+                arcpy.management.CalculateField(temp_fc, shape_index_field, expression, "PYTHON3")
+
+                # Define sliver criteria
+                min_area = 1.0  # Minimum area in square meters
+                max_area = 50.0  # Maximum area for slivers in square meters
+                min_shape_index = 2.0  # Minimum shape index (higher = more elongated)
+
+                if verbose:
+                    print_info("      Sliver detection criteria:")
+                    print_info("        Area: {} to {} square meters".format(min_area, max_area))
+                    print_info("        Shape index: > {} (1.0 = perfect circle)".format(min_shape_index))
+
+                # Select sliver polygons
+                sql_expression = "{} > {} AND {} <= {} AND {} > {}".format(
+                    area_field, min_area, area_field, max_area, shape_index_field, min_shape_index
+                )
+
+                arcpy.management.SelectLayerByAttribute(temp_fc, "NEW_SELECTION", sql_expression)
+
+                sliver_count = int(arcpy.management.GetCount(temp_fc)[0])
+
+                if sliver_count == 0:
+                    if verbose:
+                        print_info("      No sliver polygons detected")
+                    arcpy.management.Delete(temp_fc)
+                    return 0
+
+                if verbose:
+                    print_info("      Detected {} sliver polygons to remove".format(sliver_count))
+
+                # Get statistics on slivers being removed
+                with arcpy.da.SearchCursor(temp_fc, ["OID@", area_field, shape_index_field]) as cursor:
+                    sliver_areas = []
+                    sliver_shape_indices = []
+                    for oid, area, shape_idx in cursor:
+                        sliver_areas.append(area)
+                        sliver_shape_indices.append(shape_idx)
+
+                    if sliver_areas:
+                        avg_area = sum(sliver_areas) / len(sliver_areas)
+                        max_area_found = max(sliver_areas)
+                        avg_shape_idx = sum(sliver_shape_indices) / len(sliver_shape_indices)
+                        max_shape_idx = max(sliver_shape_indices)
+
+                        if verbose:
+                            print_info("      Sliver statistics:")
+                            print_info("        Average area: {:.2f} m²".format(avg_area))
+                            print_info("        Maximum area: {:.2f} m²".format(max_area_found))
+                            print_info("        Average shape index: {:.1f}".format(avg_shape_idx))
+                            print_info("        Maximum shape index: {:.1f}".format(max_shape_idx))
+
+                # Use Eliminate tool to remove slivers by merging them into neighboring polygons
+                if verbose:
+                    print_info("      Using Eliminate tool to merge slivers into adjacent polygons...")
+
+                # Create temporary layer for elimination
+                eliminate_layer = "temp_eliminate_layer"
+                if arcpy.Exists(eliminate_layer):
+                    arcpy.management.Delete(eliminate_layer)
+
+                arcpy.management.MakeFeatureLayer(temp_fc, eliminate_layer)
+
+                # Apply selection to eliminate only slivers
+                arcpy.management.SelectLayerByAttribute(eliminate_layer, "NEW_SELECTION", sql_expression)
+
+                # Create output feature class for elimination result
+                eliminated_fc = "in_memory\\temp_eliminated"
+
+                # Use Eliminate tool to merge slivers into neighboring polygons
+                # Eliminate merges selected features into neighboring features based on longest shared boundary
+                arcpy.management.Eliminate(eliminate_layer, eliminated_fc)
+
+                # Verify elimination results
+                if arcpy.Exists(eliminated_fc):
+                    eliminated_count = int(arcpy.management.GetCount(eliminated_fc)[0])
+
+                    if eliminated_count > 0:
+                        if verbose:
+                            print_info("      Elimination successful: {} features after sliver removal".format(eliminated_count))
+
+                        # Replace original feature class with eliminated version
+                        # Delete all features in original and copy from eliminated
+                        arcpy.management.DeleteFeatures(input_fc)
+
+                        # Insert eliminated features back into original
+                        with arcpy.da.SearchCursor(eliminated_fc, ["SHAPE@"] + [f.name for f in arcpy.ListFields(eliminated_fc) if f.name not in ["OID@", "SHAPE@"]]) as search_cursor:
+                            with arcpy.da.InsertCursor(input_fc, ["SHAPE@"] + [f.name for f in arcpy.ListFields(input_fc) if f.name not in ["OID@", "SHAPE@"]]) as insert_cursor:
+                                for row in search_cursor:
+                                    insert_cursor.insertRow(row)
+
+                        if verbose:
+                            print_info("      Successfully updated original feature class")
+
+                    else:
+                        if verbose:
+                            print_info("      WARNING: Elimination produced no features")
+                        sliver_count = 0
+
+                    # Clean up eliminated feature class
+                    arcpy.management.Delete(eliminated_fc)
+                else:
+                    if verbose:
+                        print_info("      WARNING: Elimination failed - no output created")
+                    sliver_count = 0
+
+                # Clean up temporary layer
+                if arcpy.Exists(eliminate_layer):
+                    arcpy.management.Delete(eliminate_layer)
+
+            finally:
+                # Clean up temporary feature class
+                if arcpy.Exists(temp_fc):
+                    arcpy.management.Delete(temp_fc)
+
+            # Get final feature count
+            final_count = int(arcpy.management.GetCount(input_fc)[0])
+            features_removed = initial_count - final_count
+
+            if verbose:
+                print_info("      Sliver removal completed:")
+                print_info("        Features removed: {}".format(features_removed))
+                print_info("        Final feature count: {}".format(final_count))
+
+            return sliver_count
+
+        except Exception as e:
+            if verbose:
+                print_info("      Error removing sliver polygons: {}".format(e))
+                import traceback
+                traceback.print_exc()
+            return 0
 
     def _restart_sanitization(self, input_fc, verbose=False):
         """Restart sanitization process from beginning after hole deletion"""
