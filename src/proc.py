@@ -111,7 +111,7 @@ class DataWorkflows:
     """Main workflow orchestrator for data processing operations"""
 
     @staticmethod
-    def process_prepare_column(codes_path, blocks_gdb, parcels_gdb, output_folder='gdbs', count=None, force=False):
+    def process_prepare_column(codes_path, blocks_gdb, parcels_gdb, output_folder='gdbs', count=None, force=False, buffer_distance=100):
         """Process prepare column from data.csv"""
         try:
             log_step("PROCESS PREPARE COLUMN")
@@ -165,7 +165,7 @@ class DataWorkflows:
                 # Create GDB for this specific survey unit
                 print("Creating GDB for: {}".format(format_message(survey_unit)))
                 success = GDBProc.create_survey_unit_gdb(
-                    survey_data, blocks_gdb, parcels_gdb, output_folder, force=force
+                    survey_data, blocks_gdb, parcels_gdb, output_folder, force=force, buffer_distance=buffer_distance
                 )
 
                 if success:

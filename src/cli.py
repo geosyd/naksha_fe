@@ -60,6 +60,7 @@ class CLI:
                 self.backup_uploaded = None
                 self.do_overlap_fix = False
                 self.remove_slivers = False
+                self.buffer = None
 
                 # Parse flags for different commands
                 i = 2
@@ -92,6 +93,13 @@ class CLI:
                     elif sys.argv[i] == '--remove-slivers':
                         self.remove_slivers = True
                         i += 1
+                    elif sys.argv[i] == '--buffer' and i + 1 < len(sys.argv):
+                        try:
+                            self.buffer = int(sys.argv[i + 1])
+                            i += 2
+                        except ValueError:
+                            print("ERROR: --buffer requires a number (meters)")
+                            i += 2
                     else:
                         i += 1
 
@@ -120,6 +128,7 @@ class CLI:
         print("  --gdbs         Clear GDB files (default for clear command)")
         print("  --logs         Clear log file (data/log.txt)")
         print("  --force        Force overwrite existing GDB files (prepare command)")
+        print("  --buffer N     Set buffer distance (N meters) for prepare command (default: 100)")
         print("  --buffer-erase N  Use specific buffer distance (N centimeters) for sanitize command")
         print("                   Recommended: 5-30cm for typical parcel data")
         print("  --backup-uploaded  Backup GDBs after successful upload to data/gdbs/backup (upload command)")
@@ -135,6 +144,7 @@ class CLI:
         print("  python main.py codes")
         print("  python main.py codes --state \"Tamil Nadu\"")
         print("  python main.py prepare")
+        print("  python main.py prepare --buffer 50  # Use 50m buffer instead of default 100m")
         print("  python main.py upload")
         print("  python main.py upload --backup-uploaded  # Backup GDBs after successful upload")
         print("  python main.py sanitize")
@@ -472,8 +482,9 @@ class CLI:
         log_info("Starting survey unit codes processing...", force_log=True)
         print("Processing survey unit codes...")
         from src.proc import DataWorkflows
+        buffer_distance = args.buffer if args.buffer is not None else 100
         return DataWorkflows.process_prepare_column(
-            'data/codes.csv', 'data/nblocks.gdb', 'data/nparcels.gdb', 'data/gdbs', None, force=args.force
+            'data/codes.csv', 'data/nblocks.gdb', 'data/nparcels.gdb', 'data/gdbs', None, force=args.force, buffer_distance=buffer_distance
         )
 
     def _run_validate(self, args):

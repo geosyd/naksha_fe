@@ -157,11 +157,11 @@ class GDBProc:
             # Continue without domain - field will still work but without domain validation
 
     @staticmethod
-    def create_survey_unit_gdb(survey_data, blocks_gdb, parcels_gdb, folder='gdbs', force=False):
+    def create_survey_unit_gdb(survey_data, blocks_gdb, parcels_gdb, folder='gdbs', force=False, buffer_distance=100):
         """Create GDB for a specific survey unit using correct workflow:
         1. Extract survey unit details from survey_data
         2. Find matching block in nblocks.gdb using ward/block details
-        3. Extract parcels from nparcels.gdb using 100m buffer around block
+        3. Extract parcels from nparcels.gdb using buffer_distance buffer around block
         """
         try:
             if not ArcCore or not ArcCore.is_available():
@@ -523,8 +523,8 @@ class GDBProc:
             
             print("    [OK] Added fields to PROPERTY_PARCEL layer")
             
-            # Copy parcels for this survey unit with 100m buffer clipping
-            parcel_count = GDBProc._copy_parcels_for_survey_unit(survey_unit_code, block_geometry, parcels_gdb, gdb_workspace, layer_name, survey_data)
+            # Copy parcels for this survey unit with buffer_distance buffer clipping
+            parcel_count = GDBProc._copy_parcels_for_survey_unit(survey_unit_code, block_geometry, parcels_gdb, gdb_workspace, layer_name, survey_data, buffer_distance=buffer_distance)
             
             print("    [OK] Added {} parcels to GDB".format(parcel_count))
             
@@ -664,8 +664,8 @@ class GDBProc:
             raise
 
     @staticmethod
-    def _copy_parcels_for_survey_unit(survey_unit_code, block_geometry, parcels_gdb, gdb_workspace, layer_name, survey_data, verbose=False):
-        """Copy parcels for a specific survey unit with 100m buffer clipping using ArcPy tools"""
+    def _copy_parcels_for_survey_unit(survey_unit_code, block_geometry, parcels_gdb, gdb_workspace, layer_name, survey_data, buffer_distance=100, verbose=False):
+        """Copy parcels for a specific survey unit with buffer_distance buffer clipping using ArcPy tools"""
         try:
             import uuid
             from datetime import datetime
@@ -711,12 +711,12 @@ class GDBProc:
             with arcpy.da.InsertCursor(temp_block_fc, ["SHAPE@"]) as cursor:
                 cursor.insertRow([block_geometry])
 
-            # Create 100m buffer using ArcPy Buffer tool
+            # Create buffer using ArcPy Buffer tool
             temp_buffer_fc = "in_memory\\temp_buffer_{}".format(survey_unit_code)
             if verbose:
-                print("    Creating 100m buffer using ArcPy Buffer tool...")
+                print("    Creating {}m buffer using ArcPy Buffer tool...".format(buffer_distance))
 
-            arcpy.Buffer_analysis(temp_block_fc, temp_buffer_fc, "100 Meters", "FULL", "ROUND")
+            arcpy.Buffer_analysis(temp_block_fc, temp_buffer_fc, "{} Meters".format(buffer_distance), "FULL", "ROUND")
 
             if not arcpy.Exists(temp_buffer_fc):
                 print("    Error: Failed to create buffer with ArcPy tool")
@@ -2821,7 +2821,6 @@ class GDBValid:
 
 
 # Configuration constants
-BUFFER_DISTANCE = 100
 REQUIRED_FIELDS = [
     'state_lgd_cd', 'dist_lgd_cd', 'ulb_lgd_cd', 'ward_lgd_cd',
     'vill_lgd_cd', 'col_lgd_cd', 'survey_unit_id'

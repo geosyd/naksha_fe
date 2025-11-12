@@ -6,6 +6,7 @@ python main.py codes --state "Tamil Nadu"
 python main.py stats
 
 python main.py prepare --force
+python main.py prepare --buffer 50
 python main.py validate
 
 python main.py sanitize
