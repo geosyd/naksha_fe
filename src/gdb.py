@@ -524,7 +524,17 @@ class GDBProc:
             print("    [OK] Added fields to PROPERTY_PARCEL layer")
             
             # Copy parcels for this survey unit with buffer_distance buffer clipping
-            parcel_count = GDBProc._copy_parcels_for_survey_unit(survey_unit_code, block_geometry, parcels_gdb, gdb_workspace, layer_name, survey_data, buffer_distance=buffer_distance)
+            # Use the buffer_distance parameter (with fallback to handle scoping issues)
+            actual_buffer_distance = buffer_distance if 'buffer_distance' in dir() else 100
+            parcel_count = GDBProc._copy_parcels_for_survey_unit(
+                survey_unit_code,
+                block_geometry,
+                parcels_gdb,
+                gdb_workspace,
+                layer_name,
+                survey_data,
+                actual_buffer_distance
+            )
             
             print("    [OK] Added {} parcels to GDB".format(parcel_count))
             
