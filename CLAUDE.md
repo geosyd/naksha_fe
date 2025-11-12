@@ -2,7 +2,7 @@
 ## Project Overview and Success Instructions
 
 ## Priority 1: Core Functionality and Architecture
-- Use Python at "C:\Python27\ArcGIS10.7\python.exe" with ArcPy integration for geospatial processing
+- Use Python at "C:\Python27\ArcGIS10.8\python.exe" with ArcPy integration for geospatial processing
 - Modular architecture with focused modules in `src/` directory, keeping main.py around 30 lines
 - Short *.py file names (3-4 characters) and optimize src folder files to around 600 lines of code
 - Two-stage upload system: file upload + JSON data upload with Naksha REST API communication
