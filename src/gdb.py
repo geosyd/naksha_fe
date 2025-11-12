@@ -101,6 +101,62 @@ class GDBProc:
     """GDB processing operations for preparation and validation"""
 
     @staticmethod
+    def _read_drone_survey_date():
+        """Read drone survey date from data/drone.txt file"""
+        try:
+            drone_file_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'drone.txt')
+            if os.path.exists(drone_file_path):
+                with open(drone_file_path, 'r') as f:
+                    date_line = f.readline().strip()
+                    if date_line:
+                        # Convert DD-MM-YYYY to YYYY-MM-DD format for database compatibility
+                        try:
+                            parts = date_line.split('-')
+                            if len(parts) == 3:
+                                day, month, year = parts
+                                return "{}-{}-{}".format(year, month.zfill(2), day.zfill(2))
+                            else:
+                                return date_line  # Return as-is if format is different
+                        except:
+                            return date_line  # Return as-is if parsing fails
+                    else:
+                        return datetime.now().strftime("%Y-%m-%d")  # Fallback to current date
+            else:
+                print("Warning: data/drone.txt not found, using current date for drone survey date")
+                return datetime.now().strftime("%Y-%m-%d")  # Fallback to current date
+        except Exception as e:
+            print("Warning: Error reading drone survey date, using current date: {}".format(e))
+            return datetime.now().strftime("%Y-%m-%d")  # Fallback to current date
+
+    @staticmethod
+    def _create_poly_quality_domain(gdb_workspace):
+        """Create coded value domain for poly_qlty_soi field"""
+        try:
+            # Try to create domain directly - if it exists, it will fail which is fine
+            try:
+                # Create coded value domain
+                arcpy.CreateDomain_management(gdb_workspace, "poly_qlty_soi", "Polygon Quality SOI", "TEXT", "CODED")
+
+                # Add coded values (1=Confirmed, 2=Tentative)
+                arcpy.AddCodedValueToDomain_management(gdb_workspace, "poly_qlty_soi", "1", "Confirmed")
+                arcpy.AddCodedValueToDomain_management(gdb_workspace, "poly_qlty_soi", "2", "Tentative")
+
+                print("    [OK] Created poly_qlty_soi domain")
+            except Exception as domain_error:
+                # Domain might already exist - check if it's a "domain already exists" error
+                error_msg = str(domain_error).lower()
+                if "already exists" in error_msg or "duplicate" in error_msg:
+                    print("    [OK] poly_qlty_soi domain already exists")
+                else:
+                    # Re-raise if it's a different error
+                    print("    Warning: Could not create poly_qlty_soi domain: {}".format(domain_error))
+                    raise domain_error
+
+        except Exception as e:
+            print("    Warning: Error creating poly_qlty_soi domain: {}".format(e))
+            # Continue without domain - field will still work but without domain validation
+
+    @staticmethod
     def create_survey_unit_gdb(survey_data, blocks_gdb, parcels_gdb, folder='gdbs', force=False):
         """Create GDB for a specific survey unit using correct workflow:
         1. Extract survey unit details from survey_data
@@ -590,6 +646,15 @@ class GDBProc:
                     # Field might already exist, continue
                     pass
 
+            # Create domain for poly_qlty_soi field (1=Confirmed, 2=Tentative)
+            try:
+                GDBProc._create_poly_quality_domain(gdb_workspace)
+                # Assign domain to poly_qlty_soi field
+                arcpy.AssignDomainToField_management(os.path.join(gdb_workspace, layer_name), "poly_qlty_soi", "poly_qlty_soi")
+                print("    [OK] Created and assigned domain for poly_qlty_soi field")
+            except Exception as e:
+                print("    Warning: Could not create domain for poly_qlty_soi: {}".format(e))
+
             # soi_uniq_id GlobalID field will be added after features are inserted
 
             print("    [OK] Added {} fields to layer".format(len(field_definitions) + 1))
@@ -604,9 +669,12 @@ class GDBProc:
         try:
             import uuid
             from datetime import datetime
-            
+
             parcel_count = 0
             current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            # Read drone survey date from data/drone.txt
+            drone_date = GDBProc._read_drone_survey_date()
 
             # Set workspace to parcels GDB to access the parcels layer
             original_workspace = arcpy.env.workspace
@@ -729,15 +797,15 @@ class GDBProc:
                                     ulb_code,                                    # vill_lgd_cd (same as ulb_lgd_cd)
                                     ulb_code,                                    # col_lgd_cd (same as ulb_lgd_cd)
                                     survey_unit_code,                          # survey_unit_id
-                                    current_date,                               # soi_drone_survey_date
+                                    drone_date,                                 # soi_drone_survey_date (from data/drone.txt)
                                     current_date,                               # sys_imported_timestamp
                                     "",                                          # soi_plot_no (will be assigned after conversion)
                                     "",                                          # clr_plot_no (will be assigned after conversion)
-                                    "0",                                        # old_survey_no
+                                    "NA",                                       # old_survey_no (always NA)
                                     parcel_uuid,                                # old_soi_uniq_id
                                     "",                                          # old_clr_plot_no (will be assigned after conversion)
-                                    1,                                          # status (active)
-                                    "1",                                        # poly_qlty_soi
+                                    0,                                          # status (always 0)
+                                    "1",                                        # poly_qlty_soi (1=Confirmed, 2=Tentative)
                                     shape_length,                               # Shape_Length
                                     shape_area                                  # Shape_Area
                                 ])
@@ -842,6 +910,9 @@ class GDBProc:
                 else:
                     if verbose:
                         print("    SUCCESS: Enhanced multipart conversion completed")
+
+                # Remove ORIG_FID field that's automatically created by MultipartToSinglepart tool
+                GDBProc._remove_orig_fid_field(os.path.join(gdb_workspace, layer_name), verbose)
             else:
                 # No multipart features found, clean up temp layer
                 arcpy.Delete_management(temp_single_fc)
@@ -1303,6 +1374,25 @@ class GDBProc:
             error_msg = "Error validating GDB features: {}".format(e)
             print("    ERROR: {}".format(error_msg))
             return False, error_msg
+
+    @staticmethod
+    def _remove_orig_fid_field(fc_path, verbose=False):
+        """Remove ORIG_FID field that's automatically created by MultipartToSinglepart tool"""
+        try:
+            # Check if ORIG_FID field exists
+            field_names = [f.name for f in arcpy.ListFields(fc_path)]
+            if "ORIG_FID" in field_names:
+                arcpy.DeleteField_management(fc_path, "ORIG_FID")
+                if verbose:
+                    print("    [OK] Removed ORIG_FID field")
+                else:
+                    print("    [OK] Removed ORIG_FID field")
+            else:
+                if verbose:
+                    print("    ORIG_FID field not found - no removal needed")
+        except Exception as e:
+            # Continue even if field removal fails
+            print("    Warning: Could not remove ORIG_FID field: {}".format(e))
 
     @staticmethod
     def _assign_sequential_plot_numbers(fc_path):
