@@ -11,7 +11,7 @@ echo Current PATH length: %PATH%
 echo.
 
 REM Reset PATH completely - start with ESRI Python only
-set PATH=C:\Python27\ArcGIS10.7;C:\Python27\ArcGIS10.7\Scripts
+set PATH=C:\Python27\ArcGIS10.8;C:\Python27\ArcGIS10.8\Scripts
 
 REM Add essential Windows directories
 set PATH=%PATH%;C:\Windows\system32
@@ -25,7 +25,7 @@ if exist "C:\Program Files\dotnet" set PATH=%PATH%;C:\Program Files\dotnet
 if exist "C:\Program Files (x86)\Git\cmd" set PATH=%PATH%;C:\Program Files (x86)\Git\cmd
 
 echo PATH completely reset to clean environment
-echo Python executable: C:\Python27\ArcGIS10.7\python.exe
+echo Python executable: C:\Python27\ArcGIS10.8\python.exe
 echo.
 echo New PATH length: %PATH%
 echo.
