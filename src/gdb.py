@@ -802,7 +802,7 @@ class GDBProc:
                                     "",                                          # soi_plot_no (will be assigned after conversion)
                                     "",                                          # clr_plot_no (will be assigned after conversion)
                                     "NA",                                       # old_survey_no (always NA)
-                                    parcel_uuid,                                # old_soi_uniq_id
+                                    "",                                          # old_soi_uniq_id (will be copied from soi_uniq_id later)
                                     "",                                          # old_clr_plot_no (will be assigned after conversion)
                                     0,                                          # status (always 0)
                                     "1",                                        # poly_qlty_soi (1=Confirmed, 2=Tentative)
@@ -827,16 +827,25 @@ class GDBProc:
                 if parcel_count > 0:
                     try:
                         fc_path = os.path.join(gdb_workspace, layer_name)
-                        arcpy.AddField_management(fc_path, "soi_uniq_id", "GlobalID")
-                        print("    [OK] Added soi_uniq_id as Global ID field")
+                        arcpy.AddField_management(fc_path, "soi_uniq_id", "GlobalID", "", "", "", "REQUIRED")
+                        print("    [OK] Added soi_uniq_id as required Global ID field")
                     except Exception as e:
                         print("    Warning: Could not add soi_uniq_id as Global ID field: {}".format(e))
                         # Fallback: add as GUID field
                         try:
-                            arcpy.AddField_management(fc_path, "soi_uniq_id", "GUID")
-                            print("    [WARNING: Added soi_uniq_id as GUID field (fallback)")
+                            arcpy.AddField_management(fc_path, "soi_uniq_id", "GUID", "", "", "", "REQUIRED")
+                            print("    [WARNING: Added soi_uniq_id as required GUID field (fallback)")
                         except Exception as e2:
                             print("    ERROR: Could not add soi_uniq_id field as GUID: {}".format(e2))
+
+                # Copy soi_uniq_id values to old_soi_uniq_id field after soi_uniq_id is created
+                if parcel_count > 0:
+                    try:
+                        fc_path = os.path.join(gdb_workspace, layer_name)
+                        GDBProc._copy_soi_uniq_id_to_old_soi_uniq_id(fc_path)
+                        print("    [OK] Copied soi_uniq_id values to old_soi_uniq_id field")
+                    except Exception as e:
+                        print("    Warning: Failed to copy soi_uniq_id values to old_soi_uniq_id: {}".format(e))
 
                 # Assign sequential plot numbers after multipart conversion to avoid duplicates
                 if parcel_count > 0:
@@ -1395,6 +1404,35 @@ class GDBProc:
             print("    Warning: Could not remove ORIG_FID field: {}".format(e))
 
     @staticmethod
+    def _copy_soi_uniq_id_to_old_soi_uniq_id(fc_path):
+        """Copy soi_uniq_id values to old_soi_uniq_id field to ensure they are identical"""
+        try:
+            # Check if both fields exist
+            field_names = [f.name for f in arcpy.ListFields(fc_path)]
+            if "soi_uniq_id" not in field_names:
+                print("    Warning: soi_uniq_id field not found")
+                return
+            if "old_soi_uniq_id" not in field_names:
+                print("    Warning: old_soi_uniq_id field not found")
+                return
+
+            # Copy soi_uniq_id values to old_soi_uniq_id
+            with arcpy.da.UpdateCursor(fc_path, ["soi_uniq_id", "old_soi_uniq_id"]) as cursor:
+                for row in cursor:
+                    soi_uniq_id_value = row[0]
+                    if soi_uniq_id_value:
+                        row[1] = str(soi_uniq_id_value)  # Ensure it's stored as string
+                        cursor.updateRow(row)
+                    else:
+                        print("    Warning: Found null soi_uniq_id value, skipping")
+
+            print("    [OK] Successfully copied soi_uniq_id to old_soi_uniq_id")
+
+        except Exception as e:
+            print("    Error copying soi_uniq_id to old_soi_uniq_id: {}".format(e))
+            raise
+
+    @staticmethod
     def _assign_sequential_plot_numbers(fc_path):
         """Assign sequential plot numbers to all features after multipart conversion"""
         try:
@@ -1610,6 +1648,15 @@ class GDBProc:
             except Exception as test_error:
                 if verbose:
                     print("    GlobalID field created (test warning: {})".format(test_error))
+
+            # Copy soi_uniq_id values to old_soi_uniq_id field after GlobalID recreation
+            try:
+                GDBProc._copy_soi_uniq_id_to_old_soi_uniq_id(fc_path)
+                if verbose:
+                    print("    Copied soi_uniq_id values to old_soi_uniq_id field after GlobalID recreation")
+            except Exception as copy_error:
+                if verbose:
+                    print("    Warning: Failed to copy soi_uniq_id to old_soi_uniq_id: {}".format(copy_error))
 
             return True, "Successfully recreated soi_uniq_id GlobalID field"
 
