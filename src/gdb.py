@@ -848,6 +848,9 @@ class GDBProc:
                         fc_path = os.path.join(gdb_workspace, layer_name)
                         GDBProc._copy_soi_uniq_id_to_old_soi_uniq_id(fc_path)
                         print("    [OK] Copied soi_uniq_id values to old_soi_uniq_id field")
+
+                        # Add attribute index for soi_uniq_id field
+                        GDBProc._add_soi_uniq_id_index(fc_path)
                     except Exception as e:
                         print("    Warning: Failed to copy soi_uniq_id values to old_soi_uniq_id: {}".format(e))
 
@@ -1447,6 +1450,31 @@ class GDBProc:
             # Continue even if field cannot be made required
 
     @staticmethod
+    def _add_soi_uniq_id_index(fc_path):
+        """Add attribute index for soi_uniq_id field with name FDO_soi_uniq_id"""
+        try:
+            # Check if soi_uniq_id field exists
+            field_names = [f.name for f in arcpy.ListFields(fc_path)]
+            if "soi_uniq_id" not in field_names:
+                print("    Warning: soi_uniq_id field not found for indexing")
+                return
+
+            # Check if index already exists
+            existing_indexes = arcpy.ListIndexes(fc_path)
+            index_exists = any(index.name == "FDO_soi_uniq_id" for index in existing_indexes)
+
+            if not index_exists:
+                # Add attribute index for soi_uniq_id field
+                arcpy.AddIndex_management(fc_path, "soi_uniq_id", "FDO_soi_uniq_id", "NON_UNIQUE", "ASCENDING")
+                print("    [OK] Added attribute index FDO_soi_uniq_id for soi_uniq_id field")
+            else:
+                print("    [OK] Index FDO_soi_uniq_id already exists")
+
+        except Exception as e:
+            print("    Warning: Could not add index for soi_uniq_id: {}".format(e))
+            # Continue even if index creation fails
+
+    @staticmethod
     def _copy_soi_uniq_id_to_old_soi_uniq_id(fc_path):
         """Copy soi_uniq_id values to old_soi_uniq_id field to ensure they are identical"""
         try:
@@ -1707,6 +1735,15 @@ class GDBProc:
             except Exception as copy_error:
                 if verbose:
                     print("    Warning: Failed to copy soi_uniq_id to old_soi_uniq_id: {}".format(copy_error))
+
+            # Add attribute index for soi_uniq_id field
+            try:
+                GDBProc._add_soi_uniq_id_index(fc_path)
+                if verbose:
+                    print("    Added attribute index for soi_uniq_id field")
+            except Exception as index_error:
+                if verbose:
+                    print("    Warning: Failed to add index for soi_uniq_id: {}".format(index_error))
 
             return True, "Successfully recreated soi_uniq_id GlobalID field"
 
