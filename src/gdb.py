@@ -827,13 +827,17 @@ class GDBProc:
                 if parcel_count > 0:
                     try:
                         fc_path = os.path.join(gdb_workspace, layer_name)
-                        arcpy.AddField_management(fc_path, "soi_uniq_id", "GlobalID", "", "", "", "REQUIRED")
+                        arcpy.AddField_management(fc_path, "soi_uniq_id", "GlobalID")
+                        # Make soi_uniq_id field required (shows asterisk in ArcGIS)
+                        GDBProc._make_field_required(fc_path, "soi_uniq_id")
                         print("    [OK] Added soi_uniq_id as required Global ID field")
                     except Exception as e:
                         print("    Warning: Could not add soi_uniq_id as Global ID field: {}".format(e))
                         # Fallback: add as GUID field
                         try:
-                            arcpy.AddField_management(fc_path, "soi_uniq_id", "GUID", "", "", "", "REQUIRED")
+                            arcpy.AddField_management(fc_path, "soi_uniq_id", "GUID")
+                            # Make soi_uniq_id field required (shows asterisk in ArcGIS)
+                            GDBProc._make_field_required(fc_path, "soi_uniq_id")
                             print("    [WARNING: Added soi_uniq_id as required GUID field (fallback)")
                         except Exception as e2:
                             print("    ERROR: Could not add soi_uniq_id field as GUID: {}".format(e2))
@@ -1404,6 +1408,45 @@ class GDBProc:
             print("    Warning: Could not remove ORIG_FID field: {}".format(e))
 
     @staticmethod
+    def _make_field_required(fc_path, field_name):
+        """Make a field required (not nullable) so it shows asterisk in ArcGIS"""
+        try:
+            # Check if field exists and get its type
+            field_names = [f.name for f in arcpy.ListFields(fc_path)]
+            if field_name not in field_names:
+                print("    Warning: Field {} not found for required setting".format(field_name))
+                return
+
+            # Get field type and check if it supports nullable property
+            field_type = None
+            for field in arcpy.ListFields(fc_path):
+                if field.name == field_name:
+                    field_type = field.type.upper()
+                    break
+
+            # GlobalID and OID fields cannot be made non-nullable via AlterField
+            if field_type in ['GLOBALID', 'OID']:
+                print("    [INFO] Field {} is {} type - inherently required".format(field_name, field_type))
+                return
+
+            # Make field not nullable (required) - only for supported field types
+            # Note: This is the ArcPy way to make a field required (shows asterisk in ArcGIS)
+            workspace = arcpy.env.workspace
+            if not workspace:
+                # If no workspace set, try to get it from feature class path
+                workspace = os.path.dirname(fc_path)
+
+            arcpy.AlterField_management(fc_path, field_name, new_field_alias=None,
+                                      new_field_name=None, field_is_nullable=False,
+                                      clear_field_alias=False)
+
+            print("    [OK] Made field {} required (not nullable)".format(field_name))
+
+        except Exception as e:
+            print("    Warning: Could not make field {} required: {}".format(field_name, e))
+            # Continue even if field cannot be made required
+
+    @staticmethod
     def _copy_soi_uniq_id_to_old_soi_uniq_id(fc_path):
         """Copy soi_uniq_id values to old_soi_uniq_id field to ensure they are identical"""
         try:
@@ -1619,6 +1662,13 @@ class GDBProc:
 
             # Recreate soi_uniq_id as GlobalID field
             arcpy.management.AddField(fc_path, "soi_uniq_id", "GlobalID")
+
+            # Make soi_uniq_id field required (not nullable) so it shows asterisk in ArcGIS
+            try:
+                GDBProc._make_field_required(fc_path, "soi_uniq_id")
+            except Exception as req_error:
+                if verbose:
+                    print("    Warning: Could not make soi_uniq_id required: {}".format(req_error))
 
             # Verify GlobalID field was created successfully
             field_names = [f.name for f in arcpy.ListFields(fc_path)]
