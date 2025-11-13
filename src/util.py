@@ -9,6 +9,7 @@ import os
 import shutil
 import tempfile
 import traceback
+import json
 from datetime import datetime
 
 
@@ -339,6 +340,67 @@ class SurveyMatch:
                 }
 
         return list(wards.values())
+
+
+class ConfigLoader:
+    """Configuration loading and management from input.json"""
+
+    def __init__(self, config_file='input.json'):
+        self.config_file = config_file
+        self.config_data = {}
+        self._load_config()
+
+    def _load_config(self):
+        """Load configuration from input.json file"""
+        try:
+            # Look for input.json in data/ folder
+            config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', self.config_file)
+
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    self.config_data = json.load(f)
+                print_verbose_info("Configuration loaded from: {}".format(config_path))
+            else:
+                print_error("Configuration file not found: {}".format(config_path))
+                # Set default values
+                self.config_data = {
+                    "flown": datetime.now().strftime("%d-%m-%Y"),
+                    "wkid": 32644
+                }
+        except Exception as e:
+            print_error("Error loading configuration: {}".format(e))
+            # Set default values on error
+            self.config_data = {
+                "flown": datetime.now().strftime("%d-%m-%Y"),
+                "wkid": 32644
+            }
+
+    def get_wkid(self):
+        """Get WKID from configuration"""
+        return self.config_data.get("wkid", 32644)
+
+    def get_flown_date(self):
+        """Get drone flown date from configuration"""
+        return self.config_data.get("flown", datetime.now().strftime("%d-%m-%Y"))
+
+    def get_config_value(self, key, default=None):
+        """Get specific configuration value"""
+        return self.config_data.get(key, default)
+
+    def reload_config(self):
+        """Reload configuration from file"""
+        self._load_config()
+
+
+# Global configuration instance
+_config_loader = None
+
+def get_config():
+    """Get global configuration instance"""
+    global _config_loader
+    if _config_loader is None:
+        _config_loader = ConfigLoader()
+    return _config_loader
 
 
 # Simple console functions

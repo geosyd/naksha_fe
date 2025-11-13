@@ -10,6 +10,17 @@ import csv
 import json
 from datetime import datetime
 
+# Import configuration loader
+try:
+    from src.util import get_config
+except ImportError:
+    # Fallback if util module not available
+    def get_config():
+        class DummyConfig:
+            def get_wkid(self):
+                return 32644
+        return DummyConfig()
+
 # Import logging functions
 try:
     from src.log import log_error, log_success, log_info, log_step
@@ -489,14 +500,16 @@ class BatchOps:
             if spatial_ref is None:
                 spatial_ref = geometry.spatialReference
 
-            wkid = 4326  # default
+            # Use dynamic spatial reference from configuration as default
+            config = get_config()
+            wkid = config.get_wkid()  # default from input.json
             if spatial_ref:
                 try:
                     wkid = spatial_ref.factoryCode
                     if not wkid:
-                        wkid = 4326
+                        wkid = config.get_wkid()
                 except:
-                    wkid = 4326
+                    wkid = config.get_wkid()
 
             # Extract coordinates as rings
             rings = []
@@ -599,11 +612,14 @@ class BatchOps:
                     # Add centroid coordinates as lat/long (crucial for server validation)
                     if centroid_x is not None and centroid_y is not None:
                         try:
-                            # Convert UTM to lat/long using ArcPy
-                            point = arcpy.PointGeometry(arcpy.Point(centroid_x, centroid_y), arcpy.SpatialReference(4326))
-                            wgs84_sr = arcpy.SpatialReference(4326)
-                            point_wgs84 = point.projectAs(wgs84_sr)
-                            centroid = point_wgs84.centroid
+                            # Convert coordinates to lat/long using ArcPy
+                            config = get_config()
+                            # Use configured spatial reference as source
+                            point = arcpy.PointGeometry(arcpy.Point(centroid_x, centroid_y), arcpy.SpatialReference(config.get_wkid()))
+                            # Convert to lat/long for output
+                            latlong_sr = arcpy.SpatialReference(config.get_wkid())
+                            point_latlong = point.projectAs(latlong_sr)
+                            centroid = point_latlong.centroid
 
                             attributes['latitude'] = '{:.6f}'.format(centroid.Y)
                             attributes['longitude'] = '{:.6f}'.format(centroid.X)

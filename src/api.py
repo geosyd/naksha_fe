@@ -10,8 +10,24 @@ import os
 import requests
 from datetime import datetime
 
+try:
+    import arcpy
+except ImportError:
+    arcpy = None
+
 from src.auth import NakAuth
 from src.base import NakBaseAPI
+
+# Import configuration loader
+try:
+    from src.util import get_config
+except ImportError:
+    # Fallback if util module not available
+    def get_config():
+        class DummyConfig:
+            def get_wkid(self):
+                return 32644
+        return DummyConfig()
 
 
 # Configuration constants
@@ -42,6 +58,56 @@ def print_essential_info(msg):
 
 def print_essential_success(msg):
     log_success(msg, force_log=True)
+
+
+def calculate_extent_from_features(features):
+    """Calculate real extent from feature geometries"""
+    if not features or not arcpy:
+        return "0,0,0,0"
+
+    try:
+        config = get_config()
+        wkid = config.get_wkid()
+
+        # Initialize extent bounds
+        xmin = float('inf')
+        ymin = float('inf')
+        xmax = float('-inf')
+        ymax = float('-inf')
+
+        for feature in features:
+            if isinstance(feature, dict) and 'geometry' in feature:
+                geometry = feature['geometry']
+
+                # Handle different geometry formats
+                if isinstance(geometry, dict):
+                    # If geometry is in ESRI JSON format, extract coordinates
+                    if 'rings' in geometry:
+                        for ring in geometry['rings']:
+                            for coord in ring:
+                                if len(coord) >= 2:
+                                    x, y = coord[0], coord[1]
+                                    xmin = min(xmin, x)
+                                    ymin = min(ymin, y)
+                                    xmax = max(xmax, x)
+                                    ymax = max(ymax, y)
+                    elif 'x' in geometry and 'y' in geometry:
+                        # Point geometry
+                        x, y = geometry['x'], geometry['y']
+                        xmin = min(xmin, x)
+                        ymin = min(ymin, y)
+                        xmax = max(xmax, x)
+                        ymax = max(ymax, y)
+
+        # Check if we found any valid coordinates
+        if xmin != float('inf') and xmax != float('-inf'):
+            return "{},{},{},{}".format(xmin, ymin, xmax, ymax)
+        else:
+            return "0,0,0,0"
+
+    except Exception as e:
+        print("Warning: Could not calculate extent: {}".format(e))
+        return "0,0,0,0"
 
 
 class NakshaUploader:
@@ -145,7 +211,7 @@ class NakshaUploader:
                 "survey_unit_id": long(survey_unit_code),
                 "dist_lgd_cd": int(survey_unit_info['DistrictCode']),
                 "ward_lgd_cd": int(survey_unit_info['WardCode']),
-                "extent": "0,0,0,0",
+                "extent": calculate_extent_from_features(features),
                 "plotCount": len(features),
                 "data_version_guid": data_version_guid
             }
@@ -533,7 +599,7 @@ class NakAPI(NakBaseAPI):
                 "survey_unit_id": long(survey_unit_code),
                 "dist_lgd_cd": int(survey_unit_info.get('DistrictCode', '0')),
                 "ward_lgd_cd": int(survey_unit_info.get('WardCode', '0')),
-                "extent": "0,0,0,0",
+                "extent": calculate_extent_from_features(chunk),
                 "plotCount": len(chunk),
                 "data_version_guid": data_version_guid
             }

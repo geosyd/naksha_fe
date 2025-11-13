@@ -12,16 +12,32 @@ try:
 except ImportError:
     arcpy = None
 
+# Import configuration loader
+try:
+    from src.util import get_config
+except ImportError:
+    # Fallback if util module not available
+    def get_config():
+        class DummyConfig:
+            def get_wkid(self):
+                return 32644
+        return DummyConfig()
+
 # Configuration constants (from removed config.py)
 API_BASE_URL = "https://nakshauat.dolr.gov.in"
 CHUNK_SIZE = 500
 MAX_FEATURES = 1000
 BUFFER_DISTANCE = 100
-DEFAULT_SPATIAL_REFERENCE = 4326
 GEOMETRY_TYPE_POLYGON = "POLYGON"
 RESPONSE_SUCCESS_CODE = "S-00"
 API_TIMEOUT = 30
 FILE_OPERATION_TIMEOUT = 60
+
+# Dynamic spatial reference from configuration
+def get_spatial_reference():
+    """Get spatial reference WKID from configuration"""
+    config = get_config()
+    return config.get_wkid()
 
 # Field names and mapping
 WARD_FIELDS = ['WARD', 'Ward', 'ward', 'WARD_NAME', 'WardName']
@@ -80,11 +96,12 @@ class ArcCore:
             if wkid:
                 return arcpy.SpatialReference(wkid)
 
-            return arcpy.SpatialReference(DEFAULT_SPATIAL_REFERENCE)
+            # Use dynamic spatial reference from configuration
+            return arcpy.SpatialReference(get_spatial_reference())
 
         except Exception as e:
             print_error("Error getting spatial reference: {}".format(e))
-            return arcpy.SpatialReference(DEFAULT_SPATIAL_REFERENCE)
+            return arcpy.SpatialReference(get_spatial_reference())
 
     @staticmethod
     def create_parcel_fields(gdb_path, layer_name="PROPERTY_PARCEL"):
@@ -462,7 +479,7 @@ class ArcCore:
             fc_path = os.path.join(gdb_path, fc_name)
             arcpy.CreateFeatureclass_management(
                 gdb_path, fc_name, geometry_type, None, "DISABLED", "DISABLED",
-                spatial_ref or arcpy.SpatialReference(DEFAULT_SPATIAL_REFERENCE)
+                spatial_ref or arcpy.SpatialReference(get_spatial_reference())
             )
             return fc_path
 

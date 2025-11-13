@@ -12,6 +12,17 @@ import zipfile
 import uuid
 from datetime import datetime
 
+# Import configuration loader
+try:
+    from src.util import get_config
+except ImportError:
+    # Fallback if util module not available
+    def get_config():
+        class DummyConfig:
+            def get_flown_date(self):
+                return datetime.now().strftime("%d-%m-%Y")
+        return DummyConfig()
+
 # Import logging functions
 try:
     from src.log import log_error, log_success, log_info, log_step
@@ -102,30 +113,27 @@ class GDBProc:
 
     @staticmethod
     def _read_drone_survey_date():
-        """Read drone survey date from data/drone.txt file"""
+        """Read drone survey date from input.json configuration"""
         try:
-            drone_file_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'drone.txt')
-            if os.path.exists(drone_file_path):
-                with open(drone_file_path, 'r') as f:
-                    date_line = f.readline().strip()
-                    if date_line:
-                        # Convert DD-MM-YYYY to YYYY-MM-DD format for database compatibility
-                        try:
-                            parts = date_line.split('-')
-                            if len(parts) == 3:
-                                day, month, year = parts
-                                return "{}-{}-{}".format(year, month.zfill(2), day.zfill(2))
-                            else:
-                                return date_line  # Return as-is if format is different
-                        except:
-                            return date_line  # Return as-is if parsing fails
+            config = get_config()
+            date_line = config.get_flown_date()
+
+            if date_line:
+                # Convert DD-MM-YYYY to YYYY-MM-DD format for database compatibility
+                try:
+                    parts = date_line.split('-')
+                    if len(parts) == 3:
+                        day, month, year = parts
+                        return "{}-{}-{}".format(year, month.zfill(2), day.zfill(2))
                     else:
-                        return datetime.now().strftime("%Y-%m-%d")  # Fallback to current date
+                        return date_line  # Return as-is if format is different
+                except:
+                    return date_line  # Return as-is if parsing fails
             else:
-                print("Warning: data/drone.txt not found, using current date for drone survey date")
+                print("Warning: No flown date found in input.json, using current date for drone survey date")
                 return datetime.now().strftime("%Y-%m-%d")  # Fallback to current date
         except Exception as e:
-            print("Warning: Error reading drone survey date, using current date: {}".format(e))
+            print("Warning: Error reading drone survey date from configuration, using current date: {}".format(e))
             return datetime.now().strftime("%Y-%m-%d")  # Fallback to current date
 
     @staticmethod
