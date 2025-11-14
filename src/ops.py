@@ -514,26 +514,38 @@ class BatchOps:
             # Extract coordinates as rings
             rings = []
 
-            # Handle multipart geometries
+            # Handle multipart geometries properly
             part_count = getattr(geometry, 'partCount', 1)
 
             for part_index in range(part_count):
                 part_array = geometry.getPart(part_index)
                 if part_array:
-                    ring = []
-                    point_count = part_array.count
+                    current_ring = []
 
-                    for point_index in range(point_count):
+                    # Process all points in this part, including NULL separators
+                    for point_index in range(part_array.count):
                         point = part_array.getObject(point_index)
-                        if point:
-                            # Add coordinates as [x, y] pair
-                            ring.append([point.X, point.Y])
 
-                    # Ensure ring is closed (first and last points match)
-                    if len(ring) >= 3:  # Minimum 3 points for polygon
-                        if ring[0] != ring[-1]:
-                            ring.append(ring[0])  # Close the ring
-                        rings.append(ring)
+                        if point is not None:
+                            # Add valid point coordinates as [x, y] pair
+                            current_ring.append([point.X, point.Y])
+                        else:
+                            # NULL separator indicates end of current ring (exterior or hole)
+                            # Complete the current ring if it has enough points
+                            if len(current_ring) >= 3:
+                                # Ensure ring is closed (first and last points match)
+                                if current_ring[0] != current_ring[-1]:
+                                    current_ring.append(current_ring[0])
+                                rings.append(current_ring)
+                            # Start a new ring for the next part (hole or next polygon)
+                            current_ring = []
+
+                    # Handle the last ring in this part (no NULL separator at the end)
+                    if len(current_ring) >= 3:
+                        # Ensure ring is closed (first and last points match)
+                        if current_ring[0] != current_ring[-1]:
+                            current_ring.append(current_ring[0])
+                        rings.append(current_ring)
 
             # Build ESRI JSON structure
             if rings:
