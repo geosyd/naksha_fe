@@ -307,6 +307,46 @@ class NakshaUploader:
             print_error("Plot data upload error: {}".format(e))
             return False
 
+    def check_gdb_upload_status(self, state_id, district_id, ulb_id, ward_id, survey_unit_id):
+        """Check if GDB is already uploaded (matching GUI behavior)"""
+        try:
+            if not self.auth_token:
+                print_error("Not authenticated - cannot check upload status")
+                return None
+
+            # Use the same endpoint as GUI
+            status_url = "{}/NakshaPortalAPI/api/Desktop/GetGDBTPKUploadStatus".format(self.base_url)
+
+            # Build request payload matching GUI structure
+            payload = {
+                "stateID": int(state_id),
+                "districtID": int(district_id),
+                "ulbid": int(ulb_id),
+                "wardID": int(ward_id),
+                "surveyUnitID": long(survey_unit_id),
+                "fileType": "gdb"
+            }
+
+            headers = {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer {}'.format(self.auth_token)
+            }
+
+            response = self.session.post(status_url, json=payload, headers=headers, timeout=30)
+
+            if response.status_code == 200:
+                try:
+                    return response.json()
+                except:
+                    return {"status": False, "message": "Invalid response format"}
+            else:
+                print_error("Status check failed: HTTP {}".format(response.status_code))
+                return None
+
+        except Exception as e:
+            print_error("Error checking upload status: {}".format(e))
+            return None
+
 
 class NakAPI(NakBaseAPI):
     """Naksha API client with hierarchical data fetching capabilities"""

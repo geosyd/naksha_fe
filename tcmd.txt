@@ -12,9 +12,11 @@ python main.py validate
 python main.py sanitize
 python main.py sanitize --remove-slivers --do-overlap-fix --buffer-erase 30
 
-python main.py upload --backup-uploaded
+python main.py upload --force --backup-uploaded
 
 python main.py clear
 
 python zipdo.py
 python zipdo.py --uploaded-gdbs
+
+python main.py export --surveyunit 432965
