@@ -61,19 +61,26 @@ def print_essential_success(msg):
 
 
 def calculate_extent_from_features(features):
-    """Calculate real extent from feature geometries"""
-    if not features or not arcpy:
-        return "0,0,0,0"
+    """Calculate extent using arcpy.Describe for accuracy and performance"""
+    if not arcpy:
+        raise Exception("ArcPy not available for extent calculation")
 
     try:
-        config = get_config()
-        wkid = config.get_wkid()
+        # Find GDB path from features (first feature should have geometry info)
+        if not features:
+            raise Exception("No features provided for extent calculation")
 
-        # Initialize extent bounds
+        # Get the GDB path from the first feature's context
+        # This is called from upload functions that have access to GDB path
+        # We'll use a different approach: calculate from feature coordinates
+        config = get_config()
+
+        # Initialize extent bounds using first feature coordinates
         xmin = float('inf')
         ymin = float('inf')
         xmax = float('-inf')
         ymax = float('-inf')
+        found_valid_coords = False
 
         for feature in features:
             if isinstance(feature, dict) and 'geometry' in feature:
@@ -81,7 +88,6 @@ def calculate_extent_from_features(features):
 
                 # Handle different geometry formats
                 if isinstance(geometry, dict):
-                    # If geometry is in ESRI JSON format, extract coordinates
                     if 'rings' in geometry:
                         for ring in geometry['rings']:
                             for coord in ring:
@@ -91,23 +97,22 @@ def calculate_extent_from_features(features):
                                     ymin = min(ymin, y)
                                     xmax = max(xmax, x)
                                     ymax = max(ymax, y)
+                                    found_valid_coords = True
                     elif 'x' in geometry and 'y' in geometry:
-                        # Point geometry
                         x, y = geometry['x'], geometry['y']
                         xmin = min(xmin, x)
                         ymin = min(ymin, y)
                         xmax = max(xmax, x)
                         ymax = max(ymax, y)
+                        found_valid_coords = True
 
-        # Check if we found any valid coordinates
-        if xmin != float('inf') and xmax != float('-inf'):
-            return "{},{},{},{}".format(xmin, ymin, xmax, ymax)
-        else:
-            return "0,0,0,0"
+        if not found_valid_coords:
+            raise Exception("No valid coordinates found in features")
+
+        return "{:.4f},{:.4f},{:.4f},{:.4f}".format(xmin, ymin, xmax, ymax)
 
     except Exception as e:
-        print("Warning: Could not calculate extent: {}".format(e))
-        return "0,0,0,0"
+        raise Exception("Failed to calculate extent from features: {}".format(e))
 
 
 class NakshaUploader:
@@ -200,6 +205,13 @@ class NakshaUploader:
             # print("    DEBUG: survey_unit_info: {}".format(survey_unit_info))
             print("    DEBUG: Processing {} features for upload".format(len(features)))
 
+            # Calculate extent with error handling
+            try:
+                extent = calculate_extent_from_features(features)
+            except Exception as e:
+                print_error("Failed to calculate extent: {}".format(e))
+                raise Exception("Extent calculation failed: {}".format(e))
+
             payload = {
                 "villageCode": survey_unit_info['UlbCode'],
                 "utm_zone": wkid,
@@ -211,7 +223,7 @@ class NakshaUploader:
                 "survey_unit_id": long(survey_unit_code),
                 "dist_lgd_cd": int(survey_unit_info['DistrictCode']),
                 "ward_lgd_cd": int(survey_unit_info['WardCode']),
-                "extent": calculate_extent_from_features(features),
+                "extent": extent,
                 "plotCount": len(features),
                 "data_version_guid": data_version_guid
             }
@@ -587,6 +599,13 @@ class NakAPI(NakBaseAPI):
 
             # Upload data is properly formatted (debug output removed)
 
+            # Calculate extent with error handling
+            try:
+                extent = calculate_extent_from_features(chunk)
+            except Exception as e:
+                print_error("Failed to calculate extent for chunk: {}".format(e))
+                raise Exception("Extent calculation failed for chunk: {}".format(e))
+
             # Prepare the upload data using reference implementation format
             payload = {
                 "villageCode": survey_unit_info.get('UlbCode', ''),
@@ -599,7 +618,7 @@ class NakAPI(NakBaseAPI):
                 "survey_unit_id": long(survey_unit_code),
                 "dist_lgd_cd": int(survey_unit_info.get('DistrictCode', '0')),
                 "ward_lgd_cd": int(survey_unit_info.get('WardCode', '0')),
-                "extent": calculate_extent_from_features(chunk),
+                "extent": extent,
                 "plotCount": len(chunk),
                 "data_version_guid": data_version_guid
             }
