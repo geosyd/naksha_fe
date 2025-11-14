@@ -491,7 +491,7 @@ class BatchOps:
 
     @staticmethod
     def _convert_geometry_to_esri_rings(geometry, spatial_ref=None):
-        """Convert ArcPy geometry to ESRI JSON rings format"""
+        """Convert ArcPy geometry to ESRI JSON rings format (matching C# implementation)"""
         try:
             if not geometry:
                 return None
@@ -511,7 +511,7 @@ class BatchOps:
                 except:
                     wkid = config.get_wkid()
 
-            # Extract coordinates as rings
+            # Extract coordinates as rings (matching C# processMultiPartBuffer logic)
             rings = []
 
             # Handle multipart geometries properly
@@ -547,7 +547,7 @@ class BatchOps:
                             current_ring.append(current_ring[0])
                         rings.append(current_ring)
 
-            # Build ESRI JSON structure
+            # Build ESRI JSON structure (matching C# DataTableToJsonObj output)
             if rings:
                 esri_geometry = {
                     "rings": rings,
@@ -612,33 +612,78 @@ class BatchOps:
                         field_name = field_names[i]
                         value = row[i]
 
-                        # Handle date fields with proper formatting
+                        # Handle date fields with proper formatting (matching GUI behavior)
                         if value is not None:
                             if hasattr(value, 'strftime'):  # Date field
-                                attributes[field_name] = value.strftime('%Y-%m-%d')
+                                if field_name == 'soi_drone_survey_date':
+                                    # GUI formats soi_drone_survey_date to "yyyy-MM-dd"
+                                    attributes[field_name] = value.strftime('%Y-%m-%d')
+                                elif field_name == 'sys_imported_timestamp':
+                                    # GUI formats sys_imported_timestamp to "yyyy-MM-dd"
+                                    attributes[field_name] = value.strftime('%Y-%m-%d')
+                                else:
+                                    attributes[field_name] = value.strftime('%Y-%m-%d')
                             else:
-                                attributes[field_name] = str(value)
+                                # Handle numeric fields with proper type conversion (like GUI)
+                                if isinstance(value, (int, float)):
+                                    # For JSON serialization, convert numeric fields to strings like GUI
+                                    if field_name in ['shape_length', 'shape_area']:
+                                        attributes[field_name] = str(float(value)) if value else "0.0"
+                                    else:
+                                        attributes[field_name] = str(value)
+                                elif field_name == 'soi_uniq_id':
+                                    # GUI handles soi_uniq_id as GlobalID datatype
+                                    if value:
+                                        attributes[field_name] = str(value)  # Convert GlobalID to string
+                                    else:
+                                        attributes[field_name] = None
+                                else:
+                                    attributes[field_name] = str(value) if value is not None else None
                         else:
                             attributes[field_name] = None
 
-                    # Add centroid coordinates as lat/long (crucial for server validation)
+                    # Add automatic sys_imported_timestamp if missing (GUI behavior)
+                    if 'sys_imported_timestamp' not in attributes or attributes['sys_imported_timestamp'] is None:
+                        from datetime import datetime
+                        current_time = datetime.now()
+                        attributes['sys_imported_timestamp'] = current_time.strftime('%Y-%m-%d')
+
+                    # Add default values that GUI assigns (matching GUI behavior)
+                    if 'status' not in attributes or attributes['status'] is None or attributes['status'] == '':
+                        attributes['status'] = '1'  # GUI default status (as string)
+                    if 'is_approved' not in attributes or attributes['is_approved'] is None or attributes['is_approved'] == '':
+                        attributes['is_approved'] = '0'  # GUI default approval status (as string)
+
+                    # Add centroid coordinates as lat/long (matching GUI behavior)
                     if centroid_x is not None and centroid_y is not None:
                         try:
-                            # Convert coordinates to lat/long using ArcPy
-                            config = get_config()
-                            # Use configured spatial reference as source
-                            point = arcpy.PointGeometry(arcpy.Point(centroid_x, centroid_y), arcpy.SpatialReference(config.get_wkid()))
-                            # Convert to lat/long for output
-                            latlong_sr = arcpy.SpatialReference(config.get_wkid())
-                            point_latlong = point.projectAs(latlong_sr)
+                            # Use feature class spatial reference for source coordinates
+                            if fc_spatial_ref and fc_spatial_ref.factoryCode:
+                                source_sr = fc_spatial_ref
+                            else:
+                                config = get_config()
+                                source_sr = arcpy.SpatialReference(config.get_wkid())
+
+                            # Create point geometry with source spatial reference
+                            point = arcpy.PointGeometry(arcpy.Point(centroid_x, centroid_y), source_sr)
+
+                            # Convert to WGS84 (4326) for lat/long coordinates (GUI standard)
+                            target_sr = arcpy.SpatialReference(4326)  # WGS84
+                            point_latlong = point.projectAs(target_sr)
                             centroid = point_latlong.centroid
 
+                            # Format to 6 decimal places (matching GUI precision)
                             attributes['latitude'] = '{:.6f}'.format(centroid.Y)
                             attributes['longitude'] = '{:.6f}'.format(centroid.X)
                         except Exception as e:
                             print_error("Warning: Could not convert centroid to lat/long: {}".format(e))
-                            attributes['latitude'] = ''
-                            attributes['longitude'] = ''
+                            # Use original coordinates as fallback (GUI behavior)
+                            attributes['latitude'] = '{:.6f}'.format(centroid_y) if centroid_y else ''
+                            attributes['longitude'] = '{:.6f}'.format(centroid_x) if centroid_x else ''
+                    else:
+                        # Ensure latitude/longitude fields exist even if centroid is missing
+                        attributes['latitude'] = ''
+                        attributes['longitude'] = ''
 
                     # Create feature with expected format (matching reference implementation)
                     feature_data = {

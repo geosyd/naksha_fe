@@ -312,12 +312,14 @@ class DataWorkflows:
                 # Find GDB file
                 if not os.path.exists(gdb_path):
                     print("SKIPPED: GDB file not found for {}".format(survey_unit))
+                    skipped_count += 1
                     continue
 
                 # Find survey data
                 survey_data = DataProc.find_survey_unit_info(hierarchical_data, survey_unit)
                 if not survey_data:
                     print("SKIPPED: No survey data found for {}".format(format_message(survey_unit)))
+                    skipped_count += 1
                     continue
 
                 # Upload GDB
