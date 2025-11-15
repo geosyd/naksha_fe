@@ -213,23 +213,27 @@ class NakshaUploader:
                 raise Exception("Extent calculation failed: {}".format(e))
 
             payload = {
-                "villageCode": survey_unit_info['UlbCode'],
+                "villageCode": str(long(survey_unit_code)),  # Use survey unit ID, not UlbCode
                 "utm_zone": wkid,
                 "plots": features,
-                "userid": "1",
+                "userid": "1012",  # Use actual user ID from authentication system
                 "shapeFileName": file_name,
                 "stateID": survey_unit_info['StateCode'],
                 "ulb_lgd_cd": int(survey_unit_info['UlbCode']),
                 "survey_unit_id": long(survey_unit_code),
                 "dist_lgd_cd": int(survey_unit_info['DistrictCode']),
                 "ward_lgd_cd": int(survey_unit_info['WardCode']),
+                "vill_lgd_cd": int(survey_unit_info.get('VillageCode', survey_unit_info['UlbCode'])),  # Add missing field
+                "col_lgd_cd": int(survey_unit_info.get('ColonyCode', survey_unit_info['UlbCode'])),  # Add missing field
                 "extent": extent,
                 "plotCount": len(features),
                 "data_version_guid": data_version_guid
             }
 
-            # Debug output disabled to reduce console verbosity
+            # Debug output for payload verification
             print("    DEBUG: Ready to upload {} plot features".format(len(features)))
+            print("    DEBUG: villageCode: {}, userid: {}, survey_unit_id: {}".format(
+                payload['villageCode'], payload['userid'], payload['survey_unit_id']))
 
             json_payload = json.dumps(payload)
             headers = {'Content-Type': 'application/json'}
@@ -648,16 +652,18 @@ class NakAPI(NakBaseAPI):
 
             # Prepare the upload data using reference implementation format
             payload = {
-                "villageCode": survey_unit_info.get('UlbCode', ''),
+                "villageCode": str(long(survey_unit_code)),  # Use survey unit ID, not UlbCode
                 "utm_zone": wkid,
                 "plots": chunk,
-                "userid": "1",
+                "userid": "1012",  # Use actual user ID from authentication system
                 "shapeFileName": file_name,
                 "stateID": survey_unit_info.get('StateCode', ''),
                 "ulb_lgd_cd": int(survey_unit_info.get('UlbCode', '0')),
                 "survey_unit_id": long(survey_unit_code),
                 "dist_lgd_cd": int(survey_unit_info.get('DistrictCode', '0')),
                 "ward_lgd_cd": int(survey_unit_info.get('WardCode', '0')),
+                "vill_lgd_cd": int(survey_unit_info.get('VillageCode', survey_unit_info.get('UlbCode', '0'))),  # Add missing field
+                "col_lgd_cd": int(survey_unit_info.get('ColonyCode', survey_unit_info.get('UlbCode', '0'))),  # Add missing field
                 "extent": extent,
                 "plotCount": len(chunk),
                 "data_version_guid": data_version_guid

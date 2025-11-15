@@ -62,6 +62,7 @@ class CLI:
                 self.remove_slivers = False
                 self.buffer = None
                 self.surveyunit = None
+                self.featcount = None
 
                 # Parse flags for different commands
                 i = 2
@@ -108,6 +109,13 @@ class CLI:
                         except:
                             print("ERROR: --surveyunit requires a survey unit number")
                             i += 2
+                    elif sys.argv[i] == '--featcount' and i + 1 < len(sys.argv):
+                        try:
+                            self.featcount = int(sys.argv[i + 1])
+                            i += 2
+                        except ValueError:
+                            print("ERROR: --featcount requires a number (maximum features to process)")
+                            i += 2
                     else:
                         i += 1
 
@@ -139,6 +147,7 @@ class CLI:
         print("  --force        Force overwrite existing GDB files (prepare command)")
         print("  --force        Skip upload status check and force upload (upload command)")
         print("  --buffer N     Set buffer distance (N meters) for prepare command (default: 100)")
+        print("  --featcount N  Limit processing to N features per survey unit (prepare command)")
         print("  --buffer-erase N  Use specific buffer distance (N centimeters) for sanitize command")
         print("                   Recommended: 5-30cm for typical parcel data")
         print("  --backup-uploaded  Backup GDBs after successful upload to data/gdbs/backup (upload command)")
@@ -156,6 +165,7 @@ class CLI:
         print("  python main.py codes --state \"Tamil Nadu\"")
         print("  python main.py prepare")
         print("  python main.py prepare --buffer 50  # Use 50m buffer instead of default 100m")
+        print("  python main.py prepare --featcount 20  # Limit to 20 features per survey unit")
         print("  python main.py upload")
         print("  python main.py upload --force  # Skip status check and force upload")
         print("  python main.py upload --backup-uploaded  # Backup GDBs after successful upload")
@@ -498,8 +508,11 @@ class CLI:
         print("Processing survey unit codes...")
         from src.proc import DataWorkflows
         buffer_distance = args.buffer if args.buffer is not None else 100
+        featcount = args.featcount
+        if featcount is not None:
+            print("Using feature count limit: {} features per survey unit".format(featcount))
         return DataWorkflows.process_prepare_column(
-            'data/codes.csv', 'data/nblocks.gdb', 'data/nparcels.gdb', 'data/gdbs', None, force=args.force, buffer_distance=buffer_distance
+            'data/codes.csv', 'data/nblocks.gdb', 'data/nparcels.gdb', 'data/gdbs', None, force=args.force, buffer_distance=buffer_distance, featcount=featcount
         )
 
     def _run_validate(self, args):

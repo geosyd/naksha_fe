@@ -165,7 +165,7 @@ class GDBProc:
             # Continue without domain - field will still work but without domain validation
 
     @staticmethod
-    def create_survey_unit_gdb(survey_data, blocks_gdb, parcels_gdb, folder='gdbs', force=False, buffer_distance=100):
+    def create_survey_unit_gdb(survey_data, blocks_gdb, parcels_gdb, folder='gdbs', force=False, buffer_distance=100, featcount=None):
         """Create GDB for a specific survey unit using correct workflow:
         1. Extract survey unit details from survey_data
         2. Find matching block in nblocks.gdb using ward/block details
@@ -276,7 +276,7 @@ class GDBProc:
             # Create GDB for this survey unit
             success = GDBProc._create_survey_gdb(
                 survey_unit_code, survey_data, block_geometry,
-                parcels_gdb, spatial_ref, folder
+                parcels_gdb, spatial_ref, folder, featcount=featcount
             )
 
             if success:
@@ -503,7 +503,7 @@ class GDBProc:
         return None
 
     @staticmethod
-    def _create_survey_gdb(survey_unit_code, survey_data, block_geometry, parcels_gdb, spatial_ref, folder):
+    def _create_survey_gdb(survey_unit_code, survey_data, block_geometry, parcels_gdb, spatial_ref, folder, featcount=None):
         """Create GDB for specific survey unit"""
         try:
             # Create GDB directly in output folder
@@ -541,7 +541,8 @@ class GDBProc:
                 gdb_workspace,
                 layer_name,
                 survey_data,
-                actual_buffer_distance
+                actual_buffer_distance,
+                featcount=featcount
             )
             
             print("    [OK] Added {} parcels to GDB".format(parcel_count))
@@ -682,7 +683,7 @@ class GDBProc:
             raise
 
     @staticmethod
-    def _copy_parcels_for_survey_unit(survey_unit_code, block_geometry, parcels_gdb, gdb_workspace, layer_name, survey_data, buffer_distance=100, verbose=False):
+    def _copy_parcels_for_survey_unit(survey_unit_code, block_geometry, parcels_gdb, gdb_workspace, layer_name, survey_data, buffer_distance=100, verbose=False, featcount=None):
         """Copy parcels for a specific survey unit with buffer_distance buffer clipping using ArcPy tools"""
         try:
             import uuid
@@ -786,6 +787,11 @@ class GDBProc:
                 # Read overlapping parcels and add to output GDB
                 with arcpy.da.SearchCursor(temp_intersect_fc, ["SHAPE@"]) as intersect_cursor:
                     for i, row in enumerate(intersect_cursor):
+                        # Check feature count limit
+                        if featcount is not None and parcel_count >= featcount:
+                            print("    [LIMIT] Reached feature count limit: {} features".format(featcount))
+                            break
+
                         geometry = row[0]
                         if geometry:
                             try:

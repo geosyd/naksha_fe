@@ -489,8 +489,22 @@ class BatchOps:
             print_error("Error zipping GDB: {}".format(e))
             return None
 
-    @staticmethod
-    def _convert_geometry_to_esri_rings(geometry, spatial_ref=None):
+def _are_coordinates_equal(coord1, coord2, tolerance=1e-4):
+    """
+    Compare two coordinates using tolerance-based comparison.
+
+    Args:
+        coord1: First coordinate [x, y]
+        coord2: Second coordinate [x, y]
+        tolerance: Maximum allowed difference (default: 1e-4 for 4 decimal place precision)
+
+    Returns:
+        bool: True if coordinates are equal within tolerance
+    """
+    return (abs(coord1[0] - coord2[0]) < tolerance and
+            abs(coord1[1] - coord2[1]) < tolerance)
+
+def _convert_geometry_to_esri_rings(geometry, spatial_ref=None):
         """Convert ArcPy geometry to ESRI JSON rings format (matching C# implementation)"""
         try:
             if not geometry:
@@ -528,13 +542,16 @@ class BatchOps:
 
                         if point is not None:
                             # Add valid point coordinates as [x, y] pair
-                            current_ring.append([point.X, point.Y])
+                            # Round to 4 decimal places to match GUI precision
+                            x_rounded = round(point.X, 4)
+                            y_rounded = round(point.Y, 4)
+                            current_ring.append([x_rounded, y_rounded])
                         else:
                             # NULL separator indicates end of current ring (exterior or hole)
                             # Complete the current ring if it has enough points
                             if len(current_ring) >= 3:
-                                # Ensure ring is closed (first and last points match)
-                                if current_ring[0] != current_ring[-1]:
+                                # Ensure ring is closed using tolerance-based comparison
+                                if not _are_coordinates_equal(current_ring[0], current_ring[-1], tolerance=1e-6):
                                     current_ring.append(current_ring[0])
                                 rings.append(current_ring)
                             # Start a new ring for the next part (hole or next polygon)
@@ -542,8 +559,8 @@ class BatchOps:
 
                     # Handle the last ring in this part (no NULL separator at the end)
                     if len(current_ring) >= 3:
-                        # Ensure ring is closed (first and last points match)
-                        if current_ring[0] != current_ring[-1]:
+                        # Ensure ring is closed using tolerance-based comparison
+                        if not _are_coordinates_equal(current_ring[0], current_ring[-1], tolerance=1e-6):
                             current_ring.append(current_ring[0])
                         rings.append(current_ring)
 
@@ -561,51 +578,50 @@ class BatchOps:
             print_error("Error converting geometry to ESRI rings format: {}".format(e))
             return None
 
-    @staticmethod
-    def _extract_gdb_data(gdb_path, survey_data):
-        """Extract data from GDB for upload"""
-        try:
-            if not ArcCore or not ArcCore.is_available():
-                print_error("ArcPy not available for GDB data extraction")
-                return None
+def _extract_gdb_data(gdb_path, survey_data):
+    """Extract data from GDB for upload"""
+    try:
+        if not ArcCore or not ArcCore.is_available():
+            print_error("ArcPy not available for GDB data extraction")
+            return None
 
-            fc_path = os.path.join(gdb_path, "PROPERTY_PARCEL")
-            if not arcpy.Exists(fc_path):
-                print_error("PROPERTY_PARCEL feature class not found")
-                return None
+        fc_path = os.path.join(gdb_path, "PROPERTY_PARCEL")
+        if not arcpy.Exists(fc_path):
+            print_error("PROPERTY_PARCEL feature class not found")
+            return None
 
-            # Note: GDB data issues have been fixed upfront before zipping
+        # Note: GDB data issues have been fixed upfront before zipping
 
-            # Get feature class spatial reference
-            desc = arcpy.Describe(fc_path)
-            fc_spatial_ref = desc.spatialReference
+        # Get feature class spatial reference
+        desc = arcpy.Describe(fc_path)
+        fc_spatial_ref = desc.spatialReference
 
-            features = []
-            # Use geometry tokens instead of SHAPE@JSON to have better control
-            field_names = [f.name for f in arcpy.ListFields(fc_path) if f.name != "Shape"]
-            # Insert geometry tokens at the beginning
-            field_names.insert(0, "SHAPE@")      # Geometry object
-            field_names.insert(1, "SHAPE@X")     # Centroid X
-            field_names.insert(2, "SHAPE@Y")     # Centroid Y
+        features = []
+        # Use geometry tokens instead of SHAPE@JSON to have better control
+        field_names = [f.name for f in arcpy.ListFields(fc_path) if f.name != "Shape"]
+        # Insert geometry tokens at the beginning
+        field_names.insert(0, "SHAPE@")      # Geometry object
+        field_names.insert(1, "SHAPE@X")     # Centroid X
+        field_names.insert(2, "SHAPE@Y")     # Centroid Y
 
-            with arcpy.da.SearchCursor(fc_path, field_names) as cursor:
-                for row in cursor:
-                    geometry = None
-                    attributes = {}
+        with arcpy.da.SearchCursor(fc_path, field_names) as cursor:
+            for row in cursor:
+                geometry = None
+                attributes = {}
 
-                    # Handle geometry from SHAPE@ token (first field)
-                    geometry_obj = row[0]  # SHAPE@
-                    if geometry_obj:
-                        try:
-                            # Convert ArcPy geometry to ESRI JSON rings format
-                            geometry = BatchOps._convert_geometry_to_esri_rings(geometry_obj, fc_spatial_ref)
-                        except Exception as e:
-                            print_error("Failed to convert geometry to ESRI format: {}".format(e))
-                            geometry = None
+                # Handle geometry from SHAPE@ token (first field)
+                geometry_obj = row[0]  # SHAPE@
+                if geometry_obj:
+                    try:
+                        # Convert ArcPy geometry to ESRI JSON rings format
+                        geometry = _convert_geometry_to_esri_rings(geometry_obj, fc_spatial_ref)
+                    except Exception as e:
+                        print_error("Failed to convert geometry to ESRI format: {}".format(e))
+                        geometry = None
 
-                    # Get centroid coordinates (second and third fields)
-                    centroid_x = row[1]  # SHAPE@X
-                    centroid_y = row[2]  # SHAPE@Y
+                # Get centroid coordinates (second and third fields)
+                centroid_x = row[1]  # SHAPE@X
+                centroid_y = row[2]  # SHAPE@Y
 
                     # Process all attribute fields (after geometry tokens)
                     for i in range(3, len(field_names)):
