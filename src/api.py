@@ -247,17 +247,13 @@ class NakshaUploader:
 
             response = self.session.post(upload_url, data=json_payload, headers=headers)
 
-            # Debug mode: Save request to txt and compare with proxy logs
+            # Debug mode: Save request to txt file
             if debug:
                 from src.debug import DebugUploader
 
                 # Save request to txt file
                 gdb_path = os.path.join('data', 'gdbs', survey_unit_code + '.gdb')
-                debug_file = DebugUploader.save_request_to_txt(gdb_path, payload, response, survey_unit_code)
-
-                # Compare with proxy logs
-                if debug_file:
-                    DebugUploader.compare_with_proxy_logs(payload)
+                DebugUploader.save_request_to_txt(gdb_path, payload, response, survey_unit_code)
 
             if response.status_code == 200:
                 try:
@@ -700,17 +696,13 @@ class NakAPI(NakBaseAPI):
 
             response = self.session.post(upload_url, data=json_data, headers=headers)
 
-            # Debug mode: Save request to txt and compare with proxy logs
+            # Debug mode: Save request to txt file
             if debug:
                 from src.debug import DebugUploader
 
                 # Save request to txt file
                 gdb_path = os.path.join('data', 'gdbs', survey_unit_code + '.gdb')
-                debug_file = DebugUploader.save_request_to_txt(gdb_path, payload, response, survey_unit_code)
-
-                # Compare with proxy logs
-                if debug_file:
-                    DebugUploader.compare_with_proxy_logs(payload)
+                DebugUploader.save_request_to_txt(gdb_path, payload, response, survey_unit_code)
 
             if response.status_code == 200:
                 try:
