@@ -606,7 +606,8 @@ def _reorder_attributes_for_gui(attributes):
         'is_approved'
     ]
 
-    ordered_attributes = {}
+    from collections import OrderedDict
+    ordered_attributes = OrderedDict()
     for field in field_order:
         if field in attributes:
             ordered_attributes[field] = attributes[field]
