@@ -1,24 +1,28 @@
+# ENVIRONMENT
 - Use Python at "C:\Python27\ArcGIS10.7/python.exe"
+- Use Python at "C:\Python27\ArcGIS10.8/python.exe"
+env.bat
 
-python main.py
 
+# ESSENTIAL
 python main.py codes --state "Tamil Nadu"
-python main.py stats
-
 python main.py prepare --force
-python main.py prepare --buffer 50
-python main.py prepare --featcount 30
-python main.py validate
+python main.py upload --force --backup-uploaded
 
+
+# EXTENDED
+python main.py
+python main.py stats
+python main.py validate
+python main.py clear
 python main.py sanitize
 python main.py sanitize --remove-slivers --do-overlap-fix --buffer-erase 30
-
-python main.py upload --force --backup-uploaded
-python main.py upload --force --debug
-
-python main.py clear
-
 python zipdo.py
 python zipdo.py --uploaded-gdbs
 
-python main.py export --surveyunit 432965
+
+# DEBUGGING
+python main.py prepare --featcount 30
+python main.py upload --force --debug
+python main.py prepare --buffer 50
+

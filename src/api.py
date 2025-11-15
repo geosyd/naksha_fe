@@ -250,15 +250,23 @@ class NakshaUploader:
             # Get actual total feature count from GDB
             try:
                 import arcpy
-                survey_unit_id = survey_unit_info.get('survey_unit_id', survey_unit_info.get('SurveyUnitId', ''))
+                # Use the correct key name from survey data: 'SurveyUnitCode'
+                survey_unit_id = survey_unit_info.get('SurveyUnitCode', survey_unit_info.get('survey_unit_id', survey_unit_info.get('SurveyUnitId', '')))
                 gdb_path = os.path.join('data', 'gdbs', str(survey_unit_id) + '.gdb')
                 fc_path = os.path.join(gdb_path, 'PROPERTY_PARCEL')
-                if arcpy.Exists(fc_path):
-                    total_feature_count = int(arcpy.management.GetCount(fc_path)[0])
-                    print("    Total features in GDB: {}".format(total_feature_count))
+
+                # Check if GDB exists first
+                if arcpy.Exists(gdb_path):
+                    if arcpy.Exists(fc_path):
+                        total_feature_count = int(arcpy.management.GetCount(fc_path)[0])
+                        print("    Total features in GDB: {}".format(total_feature_count))
+                    else:
+                        total_feature_count = len(features)
+                        print("    Feature class PROPERTY_PARCEL not found, using extracted features count: {}".format(total_feature_count))
                 else:
                     total_feature_count = len(features)
-                    print("    GDB not found, using extracted features count: {}".format(total_feature_count))
+                    # This shouldn't happen in normal operation since GDB should exist
+                    print("    GDB file not found at: {}, using extracted features count: {}".format(gdb_path, total_feature_count))
             except Exception as e:
                 total_feature_count = len(features)
                 print("    Could not get GDB feature count, using extracted count: {} ({})".format(total_feature_count, e))
@@ -360,21 +368,24 @@ class NakshaUploader:
                 except AttributeError:
                     response_data = json.loads(response.content)
 
-                # Debug: Log complete server response
-                print("\n" + "="*60)
-                print("UPLOAD RESPONSE DEBUG:")
-                print("Complete response data:")
-                print(json.dumps(response_data, indent=2, default=str))
-
+                # Extract response data for processing
                 result = response_data.get('result', {})
-                print("\nResult section:")
-                print(json.dumps(result, indent=2, default=str))
-
                 response_code = result.get('responseCode')
                 response_message = result.get('responseMessage', 'No message')
-                print("\nResponse code: '{}'".format(response_code))
-                print("Response message: '{}'".format(response_message))
-                print("="*60 + "\n")
+
+                # Debug: Log complete server response (only if debug flag is set)
+                if debug:
+                    print("\n" + "="*60)
+                    print("UPLOAD RESPONSE DEBUG:")
+                    print("Complete response data:")
+                    print(json.dumps(response_data, indent=2, default=str))
+
+                    print("\nResult section:")
+                    print(json.dumps(result, indent=2, default=str))
+
+                    print("\nResponse code: '{}'".format(response_code))
+                    print("Response message: '{}'".format(response_message))
+                    print("="*60 + "\n")
 
                 if response_code == 'S-00':
                     print_essential_info("    SUCCESS: Plot data chunk upload [S-00]")
@@ -389,19 +400,20 @@ class NakshaUploader:
                     print_error("    FAILED: Unknown response code [{}]".format(response_code))
                     return False
             else:
-                # Debug: Log server error response
-                print("\n" + "="*60)
-                print("SERVER ERROR RESPONSE DEBUG:")
-                print("HTTP Status Code: {}".format(response.status_code))
-                print("Response Headers:")
-                for header, value in response.headers.items():
-                    print("  {}: {}".format(header, value))
-                print("Response Content:")
-                try:
-                    print(response.content.decode('utf-8'))
-                except:
-                    print(response.content)
-                print("="*60 + "\n")
+                # Debug: Log server error response (only if debug flag is set)
+                if debug:
+                    print("\n" + "="*60)
+                    print("SERVER ERROR RESPONSE DEBUG:")
+                    print("HTTP Status Code: {}".format(response.status_code))
+                    print("Response Headers:")
+                    for header, value in response.headers.items():
+                        print("  {}: {}".format(header, value))
+                    print("Response Content:")
+                    try:
+                        print(response.content.decode('utf-8'))
+                    except:
+                        print(response.content)
+                    print("="*60 + "\n")
 
                 print_error("    FAILED: Plot data upload [{}]".format(response.status_code))
                 return False

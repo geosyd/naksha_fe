@@ -61,7 +61,6 @@ class CLI:
                 self.do_overlap_fix = False
                 self.remove_slivers = False
                 self.buffer = None
-                self.surveyunit = None
                 self.featcount = None
                 self.debug = None
 
@@ -103,13 +102,6 @@ class CLI:
                         except ValueError:
                             print("ERROR: --buffer requires a number (meters)")
                             i += 2
-                    elif sys.argv[i] == '--surveyunit' and i + 1 < len(sys.argv):
-                        try:
-                            self.surveyunit = sys.argv[i + 1]
-                            i += 2
-                        except:
-                            print("ERROR: --surveyunit requires a survey unit number")
-                            i += 2
                     elif sys.argv[i] == '--featcount' and i + 1 < len(sys.argv):
                         try:
                             self.featcount = int(sys.argv[i + 1])
@@ -141,7 +133,6 @@ class CLI:
         print("  validate       Validate GDB files in data/gdbs folder")
         print("  upload         Upload GDB files in data/gdbs folder")
         print("  sanitize       Sanitize GDB files in data/gdbs folder")
-        print("  export         Download survey snapshot image from MapServer")
         print("  clear          Clear GDB files and/or logs")
         print
         print("Options:")
@@ -156,7 +147,6 @@ class CLI:
         print("  --buffer-erase N  Use specific buffer distance (N centimeters) for sanitize command")
         print("                   Recommended: 5-30cm for typical parcel data")
         print("  --backup-uploaded  Backup GDBs after successful upload to data/gdbs/backup (upload command)")
-        print("  --surveyunit N    Specify survey unit number for export command")
         print("  --do-overlap-fix     Perform overlapping pairs fixing in sanitize command")
         print("  --remove-slivers     Remove sliver polygons using Eliminate tool in sanitize command")
         print
@@ -175,7 +165,6 @@ class CLI:
         print("  python main.py upload --force  # Skip status check and force upload")
         print("  python main.py upload --backup-uploaded  # Backup GDBs after successful upload")
         print("  python main.py upload --debug  # Save request to txt and compare with proxy logs")
-        print("  python main.py export --surveyunit 432965  # Download snapshot image for survey unit")
         print("  python main.py sanitize")
         print("  python main.py sanitize --do-overlap-fix     # Perform overlap fixing")
         print("  python main.py sanitize --buffer-erase 20   # Use 20cm buffer distance (recommended)")
@@ -208,8 +197,6 @@ class CLI:
                 success = self._run_upload(args)
             elif args.command == 'sanitize':
                 success = self._run_sanitize(args)
-            elif args.command == 'export':
-                success = self._run_export(args)
             elif args.command == 'clear':
                 success = self._run_clear(args)
             else:
@@ -580,34 +567,6 @@ class CLI:
             print("DEBUG: Saving requests to txt and comparing with proxy logs")
         from src.proc import DataWorkflows
         return DataWorkflows.process_upload_column('data/codes.csv', 'data/gdbs', cred_file, None, backup_uploaded=args.backup_uploaded, force=args.force, debug=args.debug)
-
-    def _run_export(self, args):
-        """Run export command to download survey snapshot image"""
-        import os
-
-        # Check if surveyunit parameter is provided
-        if not args.surveyunit:
-            log_error("Missing required parameter: --surveyunit")
-            print("Usage: python main.py export --surveyunit <survey_unit_number>")
-            print("Example: python main.py export --surveyunit 432965")
-            return False
-
-        # Validate survey unit number
-        try:
-            survey_unit = str(args.surveyunit)
-        except:
-            log_error("Invalid survey unit number: {}".format(args.surveyunit))
-            return False
-
-        # Check if codes file exists
-        codes_file = 'data/codes.csv'
-        if not os.path.exists(codes_file):
-            log_error("Codes file not found: {}. Please run 'python main.py codes' first to download hierarchical data.".format(codes_file))
-            return False
-
-        print("Downloading survey snapshot image...")
-        from src.proc import DataWorkflows
-        return DataWorkflows.process_export_image(survey_unit, codes_file)
 
     def _run_sanitize(self, args):
         """Run sanitize command - sanitize all GDB files in data/gdbs folder"""
