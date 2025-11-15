@@ -191,144 +191,8 @@ class NakshaUploader:
         except Exception as e:
             return False
 
-    def _upload_plot_chunk(self, features, survey_unit_info, file_name, wkid, debug=False, total_plot_count=None):
-        """Upload a single chunk of plot data"""
-        try:
-            import uuid
-            upload_url = "{}/NakshaPortalAPI/api/Desktop/UploadGDB".format(self.base_url)
-
-            data_version_guid = str(uuid.uuid4())
-            survey_unit_code = os.path.splitext(os.path.splitext(file_name)[0])[0]
-
-            # Debug: Log essential upload info (verbose output disabled)
-            # print("    DEBUG: === UPLOAD PAYLOAD ANALYSIS ===")
-            # print("    DEBUG: survey_unit_info: {}".format(survey_unit_info))
-            print("    DEBUG: Processing {} features for upload".format(len(features)))
-
-            # Calculate extent with error handling
-            try:
-                extent = calculate_extent_from_features(features)
-            except Exception as e:
-                print_error("Failed to calculate extent: {}".format(e))
-                raise Exception("Extent calculation failed: {}".format(e))
-
-            payload = {
-                "villageCode": str(long(survey_unit_code)),  # Use survey unit ID, not UlbCode
-                "utm_zone": wkid,
-                "plots": features,
-                "userid": "1012",  # Use actual user ID from authentication system
-                "shapeFileName": file_name,
-                "stateID": survey_unit_info['StateCode'],
-                "ulb_lgd_cd": int(survey_unit_info['UlbCode']),
-                "survey_unit_id": long(survey_unit_code),
-                "dist_lgd_cd": int(survey_unit_info['DistrictCode']),
-                "ward_lgd_cd": int(survey_unit_info['WardCode']),
-                "vill_lgd_cd": int(survey_unit_info.get('VillageCode', survey_unit_info['UlbCode'])),  # Add missing field
-                "col_lgd_cd": int(survey_unit_info.get('ColonyCode', survey_unit_info['UlbCode'])),  # Add missing field
-                "extent": extent,
-                "plotCount": len(features),
-                "data_version_guid": data_version_guid
-            }
-
-            # Debug output for payload verification
-            print("    DEBUG: Ready to upload {} plot features".format(len(features)))
-            print("    DEBUG: villageCode: {}, userid: {}, survey_unit_id: {}".format(
-                payload['villageCode'], payload['userid'], payload['survey_unit_id']))
-
-            # Debug mode: Save request and compare with proxy logs
-            if debug:
-                from src.debug import DebugUploader
-
-                # Analyze payload structure
-                DebugUploader.analyze_payload_structure(payload)
-
-            json_payload = json.dumps(payload)
-            headers = {'Content-Type': 'application/json'}
-
-            response = self.session.post(upload_url, data=json_payload, headers=headers)
-
-            # Debug mode: Save request to txt file
-            if debug:
-                from src.debug import DebugUploader
-
-                # Save request to txt file
-                gdb_path = os.path.join('data', 'gdbs', survey_unit_code + '.gdb')
-                DebugUploader.save_request_to_txt(gdb_path, payload, response, survey_unit_code)
-
-            if response.status_code == 200:
-                try:
-                    response_data = response.json()
-                except AttributeError:
-                    response_data = json.loads(response.content)
-
-                result = response_data.get('result', {})
-                response_code = result.get('responseCode')
-
-                if response_code == 'S-00':
-                    print_essential_info("    SUCCESS: Plot data chunk upload [S-00]")
-                    return True
-                elif response_code == 'E-00':
-                    error_msg = result.get('responseMessage') or result.get('message') or 'Server error'
-                    print_error("    FAILED: Plot data upload [E-00] - {}".format(error_msg[:50]))
-                    return False
-                else:
-                    print_error("    FAILED: Unknown response code [{}]".format(response_code))
-                    return False
-            else:
-                # Debug: Log server error response
-                print("\n" + "="*60)
-                print("SERVER ERROR RESPONSE DEBUG:")
-                print("HTTP Status Code: {}".format(response.status_code))
-                print("Response Headers:")
-                for header, value in response.headers.items():
-                    print("  {}: {}".format(header, value))
-                print("Response Content:")
-                try:
-                    print(response.content.decode('utf-8'))
-                except:
-                    print(response.content)
-                print("="*60 + "\n")
-
-                print_error("    FAILED: Plot data upload [{}]".format(response.status_code))
-                return False
-
-        except Exception as e:
-            print_error("Plot data chunk upload error: {}".format(e))
-            return False
-
-    def upload_plot_data(self, gdb_data, survey_unit_info, file_name, debug=False):
-        """Upload plot data in chunks"""
-        try:
-            features = gdb_data.get('features', []) if isinstance(gdb_data, dict) else []
-
-            if not features:
-                print_essential_info("No features found - file upload only")
-                return True
-
-            # Get WKID from configuration file (input.json)
-            config = get_config()
-            wkid = str(config.get_wkid())
-            # Use feature's spatial reference if available, otherwise use config
-            if features and features[0].get('geometry', {}).get('spatialReference', {}).get('wkid'):
-                wkid = str(features[0]['geometry']['spatialReference']['wkid'])
-
-            chunk_size = 500
-            chunks = [features[i:i + chunk_size] for i in range(0, len(features), chunk_size)]
-
-            print("    Uploading {} chunks of plot data...".format(len(chunks)))
-
-            for i, chunk in enumerate(chunks):
-                success = self._upload_plot_chunk(chunk, survey_unit_info, file_name, wkid, debug, total_feature_count)
-                if not success:
-                    print_error("    FAILED: Plot data chunk {}".format(i + 1))
-                    return False
-
-            return True
-
-        except Exception as e:
-            print_error("Plot data upload error: {}".format(e))
-            return False
-
+  
+    
     def check_gdb_upload_status(self, state_id, district_id, ulb_id, ward_id, survey_unit_id):
         """Check if GDB is already uploaded (matching GUI behavior)"""
         try:
@@ -369,6 +233,177 @@ class NakshaUploader:
             print_error("Error checking upload status: {}".format(e))
             return None
 
+    def upload_plot_data(self, gdb_data, survey_unit_info, file_name, debug=False):
+        """Upload plot data in chunks (reference implementation)"""
+        try:
+            if not self.auth_token:
+                print_error("Not authenticated - cannot upload plot data")
+                return False
+
+            # Extract features from gdb_data (should be {'features': features})
+            features = gdb_data.get('features', []) if isinstance(gdb_data, dict) else []
+
+            if not features:
+                print_essential_info("No features found - file upload only")
+                return True
+
+            # Get actual total feature count from GDB
+            try:
+                import arcpy
+                survey_unit_id = survey_unit_info.get('survey_unit_id', survey_unit_info.get('SurveyUnitId', ''))
+                gdb_path = os.path.join('data', 'gdbs', str(survey_unit_id) + '.gdb')
+                fc_path = os.path.join(gdb_path, 'PROPERTY_PARCEL')
+                if arcpy.Exists(fc_path):
+                    total_feature_count = int(arcpy.management.GetCount(fc_path)[0])
+                    print("    Total features in GDB: {}".format(total_feature_count))
+                else:
+                    total_feature_count = len(features)
+                    print("    GDB not found, using extracted features count: {}".format(total_feature_count))
+            except Exception as e:
+                total_feature_count = len(features)
+                print("    Could not get GDB feature count, using extracted count: {} ({})".format(total_feature_count, e))
+
+            # Get WKID from configuration file (input.json)
+            from src.util import get_config
+            config = get_config()
+            wkid = str(config.get_wkid())
+            # Use feature's spatial reference if available, otherwise use config
+            if features and features[0].get('geometry', {}).get('spatialReference', {}).get('wkid'):
+                wkid = str(features[0]['geometry']['spatialReference']['wkid'])
+
+            # Upload in chunks of 500 features (matching reference implementation)
+            chunk_size = 500
+            chunks = [features[i:i + chunk_size] for i in range(0, len(features), chunk_size)]
+
+            print("    Uploading {} chunks of plot data...".format(len(chunks)))
+
+            for i, chunk in enumerate(chunks):
+                success = self._upload_plot_chunk(chunk, survey_unit_info, file_name, wkid, debug, total_feature_count)
+                if not success:
+                    print_error("    FAILED: Plot data chunk {}".format(i + 1))
+                    return False
+
+            return True
+
+        except Exception as e:
+            print_error("Plot data upload error: {}".format(e))
+            return False
+
+    def _upload_plot_chunk(self, chunk, survey_unit_info, file_name, wkid, debug=False, total_plot_count=None):
+        """Upload a single chunk of plot data (reference implementation)"""
+        try:
+            if not self.auth_token:
+                print_error("Not authenticated - cannot upload plot data")
+                return False
+
+            import os
+            import uuid
+            survey_unit_code = os.path.splitext(os.path.splitext(file_name)[0])[0]
+
+            upload_url = "{}/NakshaPortalAPI/api/Desktop/UploadGDB".format(self.base_url)
+            data_version_guid = str(uuid.uuid4())
+
+            # Upload data is properly formatted (debug output removed)
+
+            # Calculate extent with error handling
+            try:
+                extent = calculate_extent_from_features(chunk)
+            except Exception as e:
+                print_error("Failed to calculate extent for chunk: {}".format(e))
+                raise Exception("Extent calculation failed for chunk: {}".format(e))
+
+            # Prepare the upload data using exact GUI pattern
+            payload = {
+                "villageCode": str(long(survey_unit_code)),  # Use survey unit ID, not UlbCode
+                "utm_zone": wkid,
+                "plots": chunk,
+                "userid": "1012",  # Use actual user ID from authentication system
+                "shapeFileName": file_name,
+                "stateID": survey_unit_info.get('StateCode', ''),
+                "dist_lgd_cd": int(survey_unit_info.get('DistrictCode', '0')),
+                "ulb_lgd_cd": int(survey_unit_info.get('UlbCode', '0')),
+                "ward_lgd_cd": int(survey_unit_info.get('WardCode', '0')),
+                "survey_unit_id": long(survey_unit_code),
+                "extent": extent,
+                "plotCount": total_plot_count if total_plot_count is not None else len(chunk),
+                "data_version_guid": data_version_guid
+            }
+
+            # Debug mode: Save request and compare with proxy logs
+            if debug:
+                from src.debug import DebugUploader
+
+                # Analyze payload structure
+                DebugUploader.analyze_payload_structure(payload)
+
+            headers = {'Content-Type': 'application/json'}
+            json_data = json.dumps(payload)
+
+            response = self.session.post(upload_url, data=json_data, headers=headers)
+
+            # Debug mode: Save request to txt file
+            if debug:
+                from src.debug import DebugUploader
+
+                # Save request to txt file
+                gdb_path = os.path.join('data', 'gdbs', survey_unit_code + '.gdb')
+                DebugUploader.save_request_to_txt(gdb_path, payload, response, survey_unit_code)
+
+            if response.status_code == 200:
+                try:
+                    response_data = response.json()
+                except AttributeError:
+                    response_data = json.loads(response.content)
+
+                # Debug: Log complete server response
+                print("\n" + "="*60)
+                print("UPLOAD RESPONSE DEBUG:")
+                print("Complete response data:")
+                print(json.dumps(response_data, indent=2, default=str))
+
+                result = response_data.get('result', {})
+                print("\nResult section:")
+                print(json.dumps(result, indent=2, default=str))
+
+                response_code = result.get('responseCode')
+                response_message = result.get('responseMessage', 'No message')
+                print("\nResponse code: '{}'".format(response_code))
+                print("Response message: '{}'".format(response_message))
+                print("="*60 + "\n")
+
+                if response_code == 'S-00':
+                    print_essential_info("    SUCCESS: Plot data chunk upload [S-00]")
+                    return True
+                elif response_code == 'E-00':
+                    error_msg = result.get('responseMessage') or result.get('message') or 'Server error'
+                    print_error("    FAILED: Plot data upload [E-00] - {}".format(error_msg[:50]))
+                    # Note: E-00 might be expected with certain data formats as mentioned in reference
+                    # This could be a server-side validation issue rather than a data format issue
+                    return False
+                else:
+                    print_error("    FAILED: Unknown response code [{}]".format(response_code))
+                    return False
+            else:
+                # Debug: Log server error response
+                print("\n" + "="*60)
+                print("SERVER ERROR RESPONSE DEBUG:")
+                print("HTTP Status Code: {}".format(response.status_code))
+                print("Response Headers:")
+                for header, value in response.headers.items():
+                    print("  {}: {}".format(header, value))
+                print("Response Content:")
+                try:
+                    print(response.content.decode('utf-8'))
+                except:
+                    print(response.content)
+                print("="*60 + "\n")
+
+                print_error("    FAILED: Plot data upload [{}]".format(response.status_code))
+                return False
+
+        except Exception as e:
+            print_error("Plot data chunk upload error: {}".format(e))
+            return False
 
 class NakAPI(NakBaseAPI):
     """Naksha API client with hierarchical data fetching capabilities"""
@@ -410,7 +445,7 @@ class NakAPI(NakBaseAPI):
 
     def get_ulbs(self, state_code, district_code):
         """Get ULBs for a district (requires authentication)"""
-        if not self.auth.auth_token:
+        if not self.auth_token:
             return []
 
         try:
@@ -454,7 +489,7 @@ class NakAPI(NakBaseAPI):
 
     def get_wards(self, state_code, district_code, ulb_code):
         """Get wards for a ULB (requires authentication)"""
-        if not self.auth.auth_token:
+        if not self.auth_token:
             return []
 
         try:
@@ -489,7 +524,7 @@ class NakAPI(NakBaseAPI):
 
     def get_survey_units(self, ward_code, district_code, state_code, ulb_code):
         """Get survey units for a ward (requires authentication) - matches .NET robust parsing"""
-        if not self.auth.auth_token:
+        if not self.auth_token:
             return []
 
         try:
@@ -573,7 +608,7 @@ class NakAPI(NakBaseAPI):
 
     def get_survey_unit_details(self, state_id, district_id, ulb_id, ward_id=0, survey_unit_id=0):
         """Get survey unit details for a ULB"""
-        if not self.auth.auth_token:
+        if not self.auth_token:
             return []
 
         try:
@@ -607,178 +642,6 @@ class NakAPI(NakBaseAPI):
         except Exception as e:
             print_error("Error fetching survey unit details for ULB {}: {}".format(ulb_id, e))
             return []
-
-    def upload_plot_data(self, gdb_data, survey_unit_info, file_name, debug=False):
-        """Upload plot data in chunks (reference implementation)"""
-        try:
-            if not self.auth.auth_token:
-                print_error("Not authenticated - cannot upload plot data")
-                return False
-
-            # Extract features from gdb_data (should be {'features': features})
-            features = gdb_data.get('features', []) if isinstance(gdb_data, dict) else []
-
-            if not features:
-                print_essential_info("No features found - file upload only")
-                return True
-
-            # Get actual total feature count from GDB
-            try:
-                import arcpy
-                gdb_path = os.path.join('data', 'gdbs', survey_unit_code + '.gdb')
-                fc_path = os.path.join(gdb_path, 'PROPERTY_PARCEL')
-                if arcpy.Exists(fc_path):
-                    total_feature_count = int(arcpy.management.GetCount(fc_path)[0])
-                    print("    Total features in GDB: {}".format(total_feature_count))
-                else:
-                    total_feature_count = len(features)
-                    print("    GDB not found, using extracted features count: {}".format(total_feature_count))
-            except Exception as e:
-                total_feature_count = len(features)
-                print("    Could not get GDB feature count, using extracted count: {} ({})".format(total_feature_count, e))
-
-            # Get WKID from configuration file (input.json)
-            config = get_config()
-            wkid = str(config.get_wkid())
-            # Use feature's spatial reference if available, otherwise use config
-            if features and features[0].get('geometry', {}).get('spatialReference', {}).get('wkid'):
-                wkid = str(features[0]['geometry']['spatialReference']['wkid'])
-
-            # Upload in chunks of 500 features (matching reference implementation)
-            chunk_size = 500
-            chunks = [features[i:i + chunk_size] for i in range(0, len(features), chunk_size)]
-
-            print("    Uploading {} chunks of plot data...".format(len(chunks)))
-
-            for i, chunk in enumerate(chunks):
-                success = self._upload_plot_chunk(chunk, survey_unit_info, file_name, wkid, debug, total_feature_count)
-                if not success:
-                    print_error("    FAILED: Plot data chunk {}".format(i + 1))
-                    return False
-
-            return True
-
-        except Exception as e:
-            print_error("Plot data upload error: {}".format(e))
-            return False
-
-    def _upload_plot_chunk(self, chunk, survey_unit_info, file_name, wkid, debug=False, total_plot_count=None):
-        """Upload a single chunk of plot data (reference implementation)"""
-        try:
-            if not self.auth.auth_token:
-                print_error("Not authenticated - cannot upload plot data")
-                return False
-
-            import os
-            import uuid
-            survey_unit_code = os.path.splitext(os.path.splitext(file_name)[0])[0]
-
-            upload_url = "{}/NakshaPortalAPI/api/Desktop/UploadGDB".format(self.base_url)
-            data_version_guid = str(uuid.uuid4())
-
-            # Upload data is properly formatted (debug output removed)
-
-            # Calculate extent with error handling
-            try:
-                extent = calculate_extent_from_features(chunk)
-            except Exception as e:
-                print_error("Failed to calculate extent for chunk: {}".format(e))
-                raise Exception("Extent calculation failed for chunk: {}".format(e))
-
-            # Prepare the upload data using reference implementation format
-            payload = {
-                "villageCode": str(long(survey_unit_code)),  # Use survey unit ID, not UlbCode
-                "utm_zone": wkid,
-                "plots": chunk,
-                "userid": "1012",  # Use actual user ID from authentication system
-                "shapeFileName": file_name,
-                "stateID": survey_unit_info.get('StateCode', ''),
-                "ulb_lgd_cd": int(survey_unit_info.get('UlbCode', '0')),
-                "survey_unit_id": long(survey_unit_code),
-                "dist_lgd_cd": int(survey_unit_info.get('DistrictCode', '0')),
-                "ward_lgd_cd": int(survey_unit_info.get('WardCode', '0')),
-                "vill_lgd_cd": int(survey_unit_info.get('VillageCode', survey_unit_info.get('UlbCode', '0'))),  # Add missing field
-                "col_lgd_cd": int(survey_unit_info.get('ColonyCode', survey_unit_info.get('UlbCode', '0'))),  # Add missing field
-                "extent": extent,
-                "plotCount": total_plot_count if total_plot_count is not None else len(features),
-                "data_version_guid": data_version_guid
-            }
-
-            # Debug mode: Save request and compare with proxy logs
-            if debug:
-                from src.debug import DebugUploader
-
-                # Analyze payload structure
-                DebugUploader.analyze_payload_structure(payload)
-
-            headers = {'Content-Type': 'application/json'}
-            json_data = json.dumps(payload)
-
-            response = self.session.post(upload_url, data=json_data, headers=headers)
-
-            # Debug mode: Save request to txt file
-            if debug:
-                from src.debug import DebugUploader
-
-                # Save request to txt file
-                gdb_path = os.path.join('data', 'gdbs', survey_unit_code + '.gdb')
-                DebugUploader.save_request_to_txt(gdb_path, payload, response, survey_unit_code)
-
-            if response.status_code == 200:
-                try:
-                    response_data = response.json()
-                except AttributeError:
-                    response_data = json.loads(response.content)
-
-                # Debug: Log complete server response
-                print("\n" + "="*60)
-                print("UPLOAD RESPONSE DEBUG:")
-                print("Complete response data:")
-                print(json.dumps(response_data, indent=2, default=str))
-
-                result = response_data.get('result', {})
-                print("\nResult section:")
-                print(json.dumps(result, indent=2, default=str))
-
-                response_code = result.get('responseCode')
-                response_message = result.get('responseMessage', 'No message')
-                print("\nResponse code: '{}'".format(response_code))
-                print("Response message: '{}'".format(response_message))
-                print("="*60 + "\n")
-
-                if response_code == 'S-00':
-                    print_essential_info("    SUCCESS: Plot data chunk upload [S-00]")
-                    return True
-                elif response_code == 'E-00':
-                    error_msg = result.get('responseMessage') or result.get('message') or 'Server error'
-                    print_error("    FAILED: Plot data upload [E-00] - {}".format(error_msg[:50]))
-                    # Note: E-00 might be expected with certain data formats as mentioned in reference
-                    # This could be a server-side validation issue rather than a data format issue
-                    return False
-                else:
-                    print_error("    FAILED: Unknown response code [{}]".format(response_code))
-                    return False
-            else:
-                # Debug: Log server error response
-                print("\n" + "="*60)
-                print("SERVER ERROR RESPONSE DEBUG:")
-                print("HTTP Status Code: {}".format(response.status_code))
-                print("Response Headers:")
-                for header, value in response.headers.items():
-                    print("  {}: {}".format(header, value))
-                print("Response Content:")
-                try:
-                    print(response.content.decode('utf-8'))
-                except:
-                    print(response.content)
-                print("="*60 + "\n")
-
-                print_error("    FAILED: Plot data upload [{}]".format(response.status_code))
-                return False
-
-        except Exception as e:
-            print_error("Plot data chunk upload error: {}".format(e))
-            return False
 
 
 class APIStats:
