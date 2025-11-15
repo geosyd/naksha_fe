@@ -666,8 +666,8 @@ def _extract_gdb_data(gdb_path, survey_data):
                         geometry = None
 
                 # Get centroid coordinates (second and third fields)
-                centroid_x = row[1]  # SHAPE@X
-                centroid_y = row[2]  # SHAPE@Y
+                centroid_x = row[2]  # SHAPE@X
+                centroid_y = row[1]  # SHAPE@Y
 
                 # Process all attribute fields (after geometry tokens)
                 for i in range(3, len(field_names)):
