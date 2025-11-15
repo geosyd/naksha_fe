@@ -567,8 +567,7 @@ def _convert_geometry_to_esri_rings(geometry, spatial_ref=None):
             # Build ESRI JSON structure (matching C# DataTableToJsonObj output)
             if rings:
                 esri_geometry = {
-                    "rings": rings,
-                    "spatialReference": {"wkid": wkid}
+                    "rings": rings
                 }
                 return esri_geometry
             else:
@@ -648,9 +647,11 @@ def _extract_gdb_data(gdb_path, survey_data):
                                 else:
                                     attributes[field_name] = str(value)
                             elif field_name == 'soi_uniq_id':
-                                # GUI handles soi_uniq_id as GlobalID datatype
+                                # GUI handles soi_uniq_id as GUID without brackets
                                 if value:
-                                    attributes[field_name] = str(value)  # Convert GlobalID to string
+                                    # Remove curly brackets from GlobalID to match GUI format
+                                    clean_guid = str(value).replace('{', '').replace('}', '')
+                                    attributes[field_name] = clean_guid
                                 else:
                                     attributes[field_name] = None
                             else:

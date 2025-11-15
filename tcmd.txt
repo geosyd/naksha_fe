@@ -1,4 +1,4 @@
-- Use Python at "C:\Python27\ArcGIS10.*"
+- Use Python at "C:\Python27\ArcGIS10.7/python.exe"
 
 python main.py
 

@@ -1044,7 +1044,7 @@ class PolygonSanitizer:
                 for oid, geom in cursor:
                     if not geom:
                         if verbose:
-                            print_info("    OID {}: Null geometry — deleting.".format(oid))
+                            print_info("    OID {}: Null geometry - deleting.".format(oid))
                         cursor.deleteRow()
                         deleted += 1
                         continue
@@ -1061,7 +1061,7 @@ class PolygonSanitizer:
 
                     if is_empty:
                         if verbose:
-                            print_info("    OID {}: Empty geometry — deleting.".format(oid))
+                            print_info("    OID {}: Empty geometry - deleting.".format(oid))
                         cursor.deleteRow()
                         deleted += 1
                         continue
@@ -1075,7 +1075,7 @@ class PolygonSanitizer:
 
                     if not is_valid:
                         if verbose:
-                            print_info("    OID {}: Invalid polygon — trying buffer(0) fix.".format(oid))
+                            print_info("    OID {}: Invalid polygon - trying buffer(0) fix.".format(oid))
                         try:
                             repaired = geom.buffer(0)  # Common fix for self-intersecting polygons
                             # Check if repaired geometry is valid and not empty
@@ -1100,12 +1100,12 @@ class PolygonSanitizer:
                                     print_info("    OID {}: Fixed geometry with buffer(0).".format(oid))
                             else:
                                 if verbose:
-                                    print_info("    OID {}: Still invalid after buffer(0) — deleting.".format(oid))
+                                    print_info("    OID {}: Still invalid after buffer(0) - deleting.".format(oid))
                                 cursor.deleteRow()
                                 deleted += 1
                         except Exception as e:
                             if verbose:
-                                print_info("    OID {}: Exception during fix ({}) — deleting.".format(oid, e))
+                                print_info("    OID {}: Exception during fix ({}) - deleting.".format(oid, e))
                             cursor.deleteRow()
                             deleted += 1
                         continue
@@ -1113,7 +1113,7 @@ class PolygonSanitizer:
                     # Optional: check zero-area polygons and degenerate geometries
                     if geom.area == 0:
                         if verbose:
-                            print_info("    OID {}: Zero-area polygon — deleting.".format(oid))
+                            print_info("    OID {}: Zero-area polygon - deleting.".format(oid))
                         cursor.deleteRow()
                         deleted += 1
                         continue
@@ -1131,7 +1131,7 @@ class PolygonSanitizer:
 
                     if total_points < 3:
                         if verbose:
-                            print_info("    OID {}: Degenerate polygon ({} points) — deleting.".format(oid, total_points))
+                            print_info("    OID {}: Degenerate polygon ({} points) - deleting.".format(oid, total_points))
                         cursor.deleteRow()
                         deleted += 1
                         continue
@@ -2088,7 +2088,7 @@ class PolygonSanitizer:
                 arcpy.management.AddField(temp_fc, perimeter_field, "DOUBLE")
                 arcpy.management.CalculateField(temp_fc, perimeter_field, "!shape.length@meters!", "PYTHON3")
 
-                # Calculate shape index (perimeter²/4π*area) - circle has shape index of 1
+                # Calculate shape index (perimeter^2/4*pi*area) - circle has shape index of 1
                 # Higher values indicate more elongated shapes (slivers)
                 shape_index_field = "SHAPE_INDEX"
                 if shape_index_field in [f.name for f in arcpy.ListFields(temp_fc)]:
@@ -2142,8 +2142,8 @@ class PolygonSanitizer:
 
                         if verbose:
                             print_info("      Sliver statistics:")
-                            print_info("        Average area: {:.2f} m²".format(avg_area))
-                            print_info("        Maximum area: {:.2f} m²".format(max_area_found))
+                            print_info("        Average area: {:.2f} m2".format(avg_area))
+                            print_info("        Maximum area: {:.2f} m2".format(max_area_found))
                             print_info("        Average shape index: {:.1f}".format(avg_shape_idx))
                             print_info("        Maximum shape index: {:.1f}".format(max_shape_idx))
 

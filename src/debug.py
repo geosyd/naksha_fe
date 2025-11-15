@@ -128,50 +128,50 @@ class DebugUploader:
             our_village_code = payload.get('villageCode')
             proxy_village_code = proxy_data.get('villageCode')
             if our_village_code == proxy_village_code:
-                comparison_results.append("✓ villageCode matches: {}".format(our_village_code))
+                comparison_results.append("MATCH villageCode matches: {}".format(our_village_code))
             else:
-                comparison_results.append("✗ villageCode mismatch: ours={}, proxy={}".format(our_village_code, proxy_village_code))
+                comparison_results.append("MISMATCH villageCode mismatch: ours={}, proxy={}".format(our_village_code, proxy_village_code))
 
             # Compare userid
             our_userid = payload.get('userid')
             proxy_userid = proxy_data.get('userid')
             if our_userid == proxy_userid:
-                comparison_results.append("✓ userid matches: {}".format(our_userid))
+                comparison_results.append("MATCH userid matches: {}".format(our_userid))
             else:
-                comparison_results.append("✗ userid mismatch: ours={}, proxy={}".format(our_userid, proxy_userid))
+                comparison_results.append("MISMATCH userid mismatch: ours={}, proxy={}".format(our_userid, proxy_userid))
 
             # Compare survey_unit_id
             our_survey_unit = payload.get('survey_unit_id')
             proxy_survey_unit = proxy_data.get('survey_unit_id')
             if our_survey_unit == proxy_survey_unit:
-                comparison_results.append("✓ survey_unit_id matches: {}".format(our_survey_unit))
+                comparison_results.append("MATCH survey_unit_id matches: {}".format(our_survey_unit))
             else:
-                comparison_results.append("✗ survey_unit_id mismatch: ours={}, proxy={}".format(our_survey_unit, proxy_survey_unit))
+                comparison_results.append("MISMATCH survey_unit_id mismatch: ours={}, proxy={}".format(our_survey_unit, proxy_survey_unit))
 
             # Compare plot count
             our_plot_count = len(payload.get('plots', []))
             proxy_plot_count = len(proxy_data.get('plots', []))
             if our_plot_count == proxy_plot_count:
-                comparison_results.append("✓ plot count matches: {}".format(our_plot_count))
+                comparison_results.append("MATCH plot count matches: {}".format(our_plot_count))
             else:
-                comparison_results.append("✗ plot count mismatch: ours={}, proxy={}".format(our_plot_count, proxy_plot_count))
+                comparison_results.append("MISMATCH plot count mismatch: ours={}, proxy={}".format(our_plot_count, proxy_plot_count))
 
             # Compare utm_zone
             our_utm_zone = payload.get('utm_zone')
             proxy_utm_zone = proxy_data.get('utm_zone')
             if our_utm_zone == proxy_utm_zone:
-                comparison_results.append("✓ utm_zone matches: {}".format(our_utm_zone))
+                comparison_results.append("MATCH utm_zone matches: {}".format(our_utm_zone))
             else:
-                comparison_results.append("✗ utm_zone mismatch: ours={}, proxy={}".format(our_utm_zone, proxy_utm_zone))
+                comparison_results.append("MISMATCH utm_zone mismatch: ours={}, proxy={}".format(our_utm_zone, proxy_utm_zone))
 
             # Compare extent (first few characters)
             our_extent = payload.get('extent', '')
             proxy_extent = proxy_data.get('extent', '')
             if our_extent and proxy_extent:
                 if our_extent[:20] == proxy_extent[:20]:
-                    comparison_results.append("✓ extent matches (first 20 chars): {}".format(our_extent[:20]))
+                    comparison_results.append("MATCH extent matches (first 20 chars): {}".format(our_extent[:20]))
                 else:
-                    comparison_results.append("✗ extent mismatch: ours={}, proxy={}".format(our_extent[:20], proxy_extent[:20]))
+                    comparison_results.append("MISMATCH extent mismatch: ours={}, proxy={}".format(our_extent[:20], proxy_extent[:20]))
 
             # Print comparison results
             print("DEBUG: Comparison with proxy log ({})".format(latest_proxy_file))
@@ -181,12 +181,12 @@ class DebugUploader:
             print("DEBUG: " + "-" * 50)
 
             # Count matches
-            matches = sum(1 for result in comparison_results if result.startswith("✓"))
+            matches = sum(1 for result in comparison_results if result.startswith("MATCH"))
             total_checks = len(comparison_results)
 
             if matches == total_checks:
                 log_success("DEBUG: All {} fields match with proxy logs!".format(total_checks))
-                print("DEBUG: 🎉 All {} fields match with proxy logs!".format(total_checks))
+                print("DEBUG: SUCCESS All {} fields match with proxy logs!".format(total_checks))
             else:
                 log_info("DEBUG: {}/{} fields match with proxy logs".format(matches, total_checks))
                 print("DEBUG: {}/{} fields match with proxy logs".format(matches, total_checks))
