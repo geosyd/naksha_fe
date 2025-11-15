@@ -312,22 +312,23 @@ class NakshaUploader:
                 print_error("Failed to calculate extent for chunk: {}".format(e))
                 raise Exception("Extent calculation failed for chunk: {}".format(e))
 
-            # Prepare the upload data using exact GUI pattern
-            payload = {
-                "villageCode": str(long(survey_unit_code)),  # Use survey unit ID, not UlbCode
-                "utm_zone": wkid,
-                "plots": chunk,
-                "userid": "1012",  # Use actual user ID from authentication system
-                "shapeFileName": file_name,
-                "stateID": survey_unit_info.get('StateCode', ''),
-                "dist_lgd_cd": int(survey_unit_info.get('DistrictCode', '0')),
-                "ulb_lgd_cd": int(survey_unit_info.get('UlbCode', '0')),
-                "ward_lgd_cd": int(survey_unit_info.get('WardCode', '0')),
-                "survey_unit_id": long(survey_unit_code),
-                "extent": extent,
-                "plotCount": total_plot_count if total_plot_count is not None else len(chunk),
-                "data_version_guid": data_version_guid
-            }
+            # Prepare the upload data following exact GUI order and structure
+            from collections import OrderedDict
+            payload = OrderedDict([
+                ("villageCode", str(long(survey_unit_code))),
+                ("utm_zone", wkid),
+                ("plots", chunk),
+                ("userid", "1012"),
+                ("shapeFileName", file_name),
+                ("stateID", survey_unit_info.get('StateCode', '')),
+                ("dist_lgd_cd", int(survey_unit_info.get('DistrictCode', '0'))),
+                ("ulb_lgd_cd", int(survey_unit_info.get('UlbCode', '0'))),
+                ("ward_lgd_cd", int(survey_unit_info.get('WardCode', '0'))),
+                ("survey_unit_id", long(survey_unit_code)),
+                ("extent", extent),
+                ("plotCount", total_plot_count if total_plot_count is not None else len(chunk)),
+                ("data_version_guid", data_version_guid)
+            ])
 
             # Debug mode: Save request and compare with proxy logs
             if debug:

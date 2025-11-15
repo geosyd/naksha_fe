@@ -760,11 +760,12 @@ def _extract_gdb_data(gdb_path, survey_data):
                 # Reorder attributes to match GUI exact field order
                 ordered_attributes = _reorder_attributes_for_gui(attributes)
 
-                # Create feature with expected format (matching reference implementation)
-                feature_data = {
-                    "geometry": geometry,
-                    "attributes": ordered_attributes
-                }
+                # Create feature with expected format (attributes first, then geometry)
+                from collections import OrderedDict
+                feature_data = OrderedDict([
+                    ("attributes", ordered_attributes),
+                    ("geometry", geometry)
+                ])
                 features.append(feature_data)
 
         # Return data in reference format: {'features': features}
