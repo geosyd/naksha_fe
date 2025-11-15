@@ -646,7 +646,7 @@ class NakAPI(NakBaseAPI):
             print_error("Plot data upload error: {}".format(e))
             return False
 
-    def _upload_plot_chunk(self, chunk, survey_unit_info, file_name, wkid):
+    def _upload_plot_chunk(self, chunk, survey_unit_info, file_name, wkid, debug=False):
         """Upload a single chunk of plot data (reference implementation)"""
         try:
             if not self.auth.auth_token:
@@ -688,10 +688,29 @@ class NakAPI(NakBaseAPI):
                 "data_version_guid": data_version_guid
             }
 
+            # Debug mode: Save request and compare with proxy logs
+            if debug:
+                from src.debug import DebugUploader
+
+                # Analyze payload structure
+                DebugUploader.analyze_payload_structure(payload)
+
             headers = {'Content-Type': 'application/json'}
             json_data = json.dumps(payload)
 
             response = self.session.post(upload_url, data=json_data, headers=headers)
+
+            # Debug mode: Save request to txt and compare with proxy logs
+            if debug:
+                from src.debug import DebugUploader
+
+                # Save request to txt file
+                gdb_path = os.path.join('data', 'gdbs', survey_unit_code + '.gdb')
+                debug_file = DebugUploader.save_request_to_txt(gdb_path, payload, response, survey_unit_code)
+
+                # Compare with proxy logs
+                if debug_file:
+                    DebugUploader.compare_with_proxy_logs(payload)
 
             if response.status_code == 200:
                 try:
