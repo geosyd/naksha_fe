@@ -275,10 +275,14 @@ class NakshaUploader:
             chunk_size = 500
             chunks = [features[i:i + chunk_size] for i in range(0, len(features), chunk_size)]
 
+            # Generate data_version_guid once for the entire upload session
+            import uuid
+            data_version_guid = str(uuid.uuid4())
+
             print("    Uploading {} chunks of plot data...".format(len(chunks)))
 
             for i, chunk in enumerate(chunks):
-                success = self._upload_plot_chunk(chunk, survey_unit_info, file_name, wkid, debug, total_feature_count)
+                success = self._upload_plot_chunk(chunk, survey_unit_info, file_name, wkid, debug, total_feature_count, data_version_guid)
                 if not success:
                     print_error("    FAILED: Plot data chunk {}".format(i + 1))
                     return False
@@ -289,7 +293,7 @@ class NakshaUploader:
             print_error("Plot data upload error: {}".format(e))
             return False
 
-    def _upload_plot_chunk(self, chunk, survey_unit_info, file_name, wkid, debug=False, total_plot_count=None):
+    def _upload_plot_chunk(self, chunk, survey_unit_info, file_name, wkid, debug=False, total_plot_count=None, data_version_guid=None):
         """Upload a single chunk of plot data (reference implementation)"""
         try:
             if not self.auth_token:
@@ -297,11 +301,11 @@ class NakshaUploader:
                 return False
 
             import os
-            import uuid
             survey_unit_code = os.path.splitext(os.path.splitext(file_name)[0])[0]
 
             upload_url = "{}/NakshaPortalAPI/api/Desktop/UploadGDB".format(self.base_url)
-            data_version_guid = str(uuid.uuid4())
+
+            # data_version_guid is now passed as parameter from the main upload method
 
             # Upload data is properly formatted (debug output removed)
 
