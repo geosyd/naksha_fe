@@ -39,10 +39,10 @@ class DebugUploader:
             debug_content.append("Survey Unit: {}".format(survey_unit_code))
             debug_content.append("")
 
-            # Add JSON payload
+            # Add JSON payload as single line string
             debug_content.append("JSON PAYLOAD:")
             debug_content.append("-" * 40)
-            debug_content.append(json.dumps(payload, indent=2))
+            debug_content.append(json.dumps(payload, separators=(',', ':')))
             debug_content.append("")
 
             # Add response details

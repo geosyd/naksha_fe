@@ -191,7 +191,7 @@ class NakshaUploader:
         except Exception as e:
             return False
 
-    def _upload_plot_chunk(self, features, survey_unit_info, file_name, wkid="32644", debug=False):
+    def _upload_plot_chunk(self, features, survey_unit_info, file_name, wkid, debug=False, total_plot_count=None):
         """Upload a single chunk of plot data"""
         try:
             import uuid
@@ -305,7 +305,10 @@ class NakshaUploader:
                 print_essential_info("No features found - file upload only")
                 return True
 
-            wkid = "32644"
+            # Get WKID from configuration file (input.json)
+            config = get_config()
+            wkid = str(config.get_wkid())
+            # Use feature's spatial reference if available, otherwise use config
             if features and features[0].get('geometry', {}).get('spatialReference', {}).get('wkid'):
                 wkid = str(features[0]['geometry']['spatialReference']['wkid'])
 
@@ -315,7 +318,7 @@ class NakshaUploader:
             print("    Uploading {} chunks of plot data...".format(len(chunks)))
 
             for i, chunk in enumerate(chunks):
-                success = self._upload_plot_chunk(chunk, survey_unit_info, file_name, wkid, debug)
+                success = self._upload_plot_chunk(chunk, survey_unit_info, file_name, wkid, debug, total_feature_count)
                 if not success:
                     print_error("    FAILED: Plot data chunk {}".format(i + 1))
                     return False
@@ -619,8 +622,25 @@ class NakAPI(NakBaseAPI):
                 print_essential_info("No features found - file upload only")
                 return True
 
-            # Determine WKID from spatial reference
-            wkid = "32644"
+            # Get actual total feature count from GDB
+            try:
+                import arcpy
+                gdb_path = os.path.join('data', 'gdbs', survey_unit_code + '.gdb')
+                fc_path = os.path.join(gdb_path, 'PROPERTY_PARCEL')
+                if arcpy.Exists(fc_path):
+                    total_feature_count = int(arcpy.management.GetCount(fc_path)[0])
+                    print("    Total features in GDB: {}".format(total_feature_count))
+                else:
+                    total_feature_count = len(features)
+                    print("    GDB not found, using extracted features count: {}".format(total_feature_count))
+            except Exception as e:
+                total_feature_count = len(features)
+                print("    Could not get GDB feature count, using extracted count: {} ({})".format(total_feature_count, e))
+
+            # Get WKID from configuration file (input.json)
+            config = get_config()
+            wkid = str(config.get_wkid())
+            # Use feature's spatial reference if available, otherwise use config
             if features and features[0].get('geometry', {}).get('spatialReference', {}).get('wkid'):
                 wkid = str(features[0]['geometry']['spatialReference']['wkid'])
 
@@ -631,7 +651,7 @@ class NakAPI(NakBaseAPI):
             print("    Uploading {} chunks of plot data...".format(len(chunks)))
 
             for i, chunk in enumerate(chunks):
-                success = self._upload_plot_chunk(chunk, survey_unit_info, file_name, wkid, debug)
+                success = self._upload_plot_chunk(chunk, survey_unit_info, file_name, wkid, debug, total_feature_count)
                 if not success:
                     print_error("    FAILED: Plot data chunk {}".format(i + 1))
                     return False
@@ -642,7 +662,7 @@ class NakAPI(NakBaseAPI):
             print_error("Plot data upload error: {}".format(e))
             return False
 
-    def _upload_plot_chunk(self, chunk, survey_unit_info, file_name, wkid, debug=False):
+    def _upload_plot_chunk(self, chunk, survey_unit_info, file_name, wkid, debug=False, total_plot_count=None):
         """Upload a single chunk of plot data (reference implementation)"""
         try:
             if not self.auth.auth_token:
@@ -680,7 +700,7 @@ class NakAPI(NakBaseAPI):
                 "vill_lgd_cd": int(survey_unit_info.get('VillageCode', survey_unit_info.get('UlbCode', '0'))),  # Add missing field
                 "col_lgd_cd": int(survey_unit_info.get('ColonyCode', survey_unit_info.get('UlbCode', '0'))),  # Add missing field
                 "extent": extent,
-                "plotCount": len(chunk),
+                "plotCount": total_plot_count if total_plot_count is not None else len(features),
                 "data_version_guid": data_version_guid
             }
 

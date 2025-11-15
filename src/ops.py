@@ -577,6 +577,52 @@ def _convert_geometry_to_esri_rings(geometry, spatial_ref=None):
             print_error("Error converting geometry to ESRI rings format: {}".format(e))
             return None
 
+def _reorder_attributes_for_gui(attributes):
+    """Reorder attributes to match GUI exact field order"""
+    # Define the exact field order as shown in GUI example
+    field_order = [
+        'objectid',
+        'state_lgd_cd',
+        'dist_lgd_cd',
+        'ulb_lgd_cd',
+        'ward_lgd_cd',
+        'vill_lgd_cd',
+        'col_lgd_cd',
+        'survey_unit_id',
+        'soi_drone_survey_date',
+        'sys_imported_timestamp',
+        'old_survey_no',
+        'soi_plot_no',
+        'clr_plot_no',
+        'old_clr_plot_no',
+        'soi_uniq_id',
+        'old_soi_uniq_id',
+        'old_soi_plot_no',
+        'status',
+        'shape_length',
+        'shape_area',
+        'latitude',
+        'longitude',
+        'is_approved'
+    ]
+
+    ordered_attributes = {}
+    for field in field_order:
+        if field in attributes:
+            ordered_attributes[field] = attributes[field]
+        else:
+            # Set default values for missing fields
+            if field == 'old_soi_plot_no':
+                ordered_attributes[field] = None
+            elif field in ['latitude', 'longitude']:
+                ordered_attributes[field] = ''
+            elif field == 'status':
+                ordered_attributes[field] = '1'
+            elif field == 'is_approved':
+                ordered_attributes[field] = '0'
+
+    return ordered_attributes
+
 def _extract_gdb_data(gdb_path, survey_data):
     """Extract data from GDB for upload"""
     try:
@@ -624,8 +670,12 @@ def _extract_gdb_data(gdb_path, survey_data):
 
                 # Process all attribute fields (after geometry tokens)
                 for i in range(3, len(field_names)):
-                    field_name = field_names[i]
+                    field_name = field_names[i].lower()  # Convert field name to lowercase
                     value = row[i]
+
+                    # Skip poly_qlty_soi field (should not be in JSON payload)
+                    if field_name == 'poly_qlty_soi':
+                        continue
 
                     # Handle date fields with proper formatting (matching GUI behavior)
                     if value is not None:
@@ -647,10 +697,10 @@ def _extract_gdb_data(gdb_path, survey_data):
                                 else:
                                     attributes[field_name] = str(value)
                             elif field_name == 'soi_uniq_id':
-                                # GUI handles soi_uniq_id as GUID without brackets
+                                # GUI handles soi_uniq_id as GUID without brackets, lowercase
                                 if value:
-                                    # Remove curly brackets from GlobalID to match GUI format
-                                    clean_guid = str(value).replace('{', '').replace('}', '')
+                                    # Remove curly brackets from GlobalID and convert to lowercase to match GUI format
+                                    clean_guid = str(value).replace('{', '').replace('}', '').lower()
                                     attributes[field_name] = clean_guid
                                 else:
                                     attributes[field_name] = None
@@ -665,35 +715,37 @@ def _extract_gdb_data(gdb_path, survey_data):
                     current_time = datetime.now()
                     attributes['sys_imported_timestamp'] = current_time.strftime('%Y-%m-%d')
 
-                # Add default values that GUI assigns (matching GUI behavior)
-                if 'status' not in attributes or attributes['status'] is None or attributes['status'] == '':
-                    attributes['status'] = '1'  # GUI default status (as string)
+                # Set status to 1 as required (matching GUI behavior)
+                attributes['status'] = '1'  # Always set status to 1
                 if 'is_approved' not in attributes or attributes['is_approved'] is None or attributes['is_approved'] == '':
                     attributes['is_approved'] = '0'  # GUI default approval status (as string)
 
-                # Add centroid coordinates as lat/long (matching GUI behavior)
+                # Add centroid coordinates using input.json WKID (matching GUI behavior)
                 if centroid_x is not None and centroid_y is not None:
                     try:
+                        # Get WKID from input.json configuration
+                        config = get_config()
+                        target_wkid = config.get_wkid()
+
                         # Use feature class spatial reference for source coordinates
                         if fc_spatial_ref and fc_spatial_ref.factoryCode:
                             source_sr = fc_spatial_ref
                         else:
-                            config = get_config()
-                            source_sr = arcpy.SpatialReference(config.get_wkid())
+                            source_sr = arcpy.SpatialReference(target_wkid)
 
                         # Create point geometry with source spatial reference
                         point = arcpy.PointGeometry(arcpy.Point(centroid_x, centroid_y), source_sr)
 
-                        # Convert to WGS84 (4326) for lat/long coordinates (GUI standard)
-                        target_sr = arcpy.SpatialReference(4326)  # WGS84
-                        point_latlong = point.projectAs(target_sr)
-                        centroid = point_latlong.centroid
+                        # Convert to target WKID from input.json for coordinates
+                        target_sr = arcpy.SpatialReference(target_wkid)
+                        point_target = point.projectAs(target_sr)
+                        centroid = point_target.centroid
 
                         # Format to 6 decimal places (matching GUI precision)
                         attributes['latitude'] = '{:.6f}'.format(centroid.Y)
                         attributes['longitude'] = '{:.6f}'.format(centroid.X)
                     except Exception as e:
-                        print_error("Warning: Could not convert centroid to lat/long: {}".format(e))
+                        print_error("Warning: Could not convert centroid coordinates: {}".format(e))
                         # Use original coordinates as fallback (GUI behavior)
                         attributes['latitude'] = '{:.6f}'.format(centroid_y) if centroid_y else ''
                         attributes['longitude'] = '{:.6f}'.format(centroid_x) if centroid_x else ''
@@ -702,10 +754,16 @@ def _extract_gdb_data(gdb_path, survey_data):
                     attributes['latitude'] = ''
                     attributes['longitude'] = ''
 
+                # Add old_soi_plot_no field as null (matching GUI format)
+                attributes['old_soi_plot_no'] = None
+
+                # Reorder attributes to match GUI exact field order
+                ordered_attributes = _reorder_attributes_for_gui(attributes)
+
                 # Create feature with expected format (matching reference implementation)
                 feature_data = {
                     "geometry": geometry,
-                    "attributes": attributes
+                    "attributes": ordered_attributes
                 }
                 features.append(feature_data)
 
