@@ -63,6 +63,7 @@ class CLI:
                 self.buffer = None
                 self.surveyunit = None
                 self.featcount = None
+                self.debug = None
 
                 # Parse flags for different commands
                 i = 2
@@ -116,6 +117,9 @@ class CLI:
                         except ValueError:
                             print("ERROR: --featcount requires a number (maximum features to process)")
                             i += 2
+                    elif sys.argv[i] == '--debug':
+                        self.debug = True
+                        i += 1
                     else:
                         i += 1
 
@@ -148,6 +152,7 @@ class CLI:
         print("  --force        Skip upload status check and force upload (upload command)")
         print("  --buffer N     Set buffer distance (N meters) for prepare command (default: 100)")
         print("  --featcount N  Limit processing to N features per survey unit (prepare command)")
+        print("  --debug        Save request to txt and compare with proxy logs (upload command)")
         print("  --buffer-erase N  Use specific buffer distance (N centimeters) for sanitize command")
         print("                   Recommended: 5-30cm for typical parcel data")
         print("  --backup-uploaded  Backup GDBs after successful upload to data/gdbs/backup (upload command)")
@@ -169,6 +174,7 @@ class CLI:
         print("  python main.py upload")
         print("  python main.py upload --force  # Skip status check and force upload")
         print("  python main.py upload --backup-uploaded  # Backup GDBs after successful upload")
+        print("  python main.py upload --debug  # Save request to txt and compare with proxy logs")
         print("  python main.py export --surveyunit 432965  # Download snapshot image for survey unit")
         print("  python main.py sanitize")
         print("  python main.py sanitize --do-overlap-fix     # Perform overlap fixing")
@@ -570,8 +576,10 @@ class CLI:
             return False
 
         print("Uploading GDB files...")
+        if args.debug:
+            print("DEBUG: Saving requests to txt and comparing with proxy logs")
         from src.proc import DataWorkflows
-        return DataWorkflows.process_upload_column('data/codes.csv', 'data/gdbs', cred_file, None, backup_uploaded=args.backup_uploaded, force=args.force)
+        return DataWorkflows.process_upload_column('data/codes.csv', 'data/gdbs', cred_file, None, backup_uploaded=args.backup_uploaded, force=args.force, debug=args.debug)
 
     def _run_export(self, args):
         """Run export command to download survey snapshot image"""

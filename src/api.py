@@ -191,7 +191,7 @@ class NakshaUploader:
         except Exception as e:
             return False
 
-    def _upload_plot_chunk(self, features, survey_unit_info, file_name, wkid="32644"):
+    def _upload_plot_chunk(self, features, survey_unit_info, file_name, wkid="32644", debug=False):
         """Upload a single chunk of plot data"""
         try:
             import uuid
@@ -235,10 +235,29 @@ class NakshaUploader:
             print("    DEBUG: villageCode: {}, userid: {}, survey_unit_id: {}".format(
                 payload['villageCode'], payload['userid'], payload['survey_unit_id']))
 
+            # Debug mode: Save request and compare with proxy logs
+            if debug:
+                from src.debug import DebugUploader
+
+                # Analyze payload structure
+                DebugUploader.analyze_payload_structure(payload)
+
             json_payload = json.dumps(payload)
             headers = {'Content-Type': 'application/json'}
 
             response = self.session.post(upload_url, data=json_payload, headers=headers)
+
+            # Debug mode: Save request to txt and compare with proxy logs
+            if debug:
+                from src.debug import DebugUploader
+
+                # Save request to txt file
+                gdb_path = os.path.join('data', 'gdbs', survey_unit_code + '.gdb')
+                debug_file = DebugUploader.save_request_to_txt(gdb_path, payload, response, survey_unit_code)
+
+                # Compare with proxy logs
+                if debug_file:
+                    DebugUploader.compare_with_proxy_logs(payload)
 
             if response.status_code == 200:
                 try:
@@ -281,7 +300,7 @@ class NakshaUploader:
             print_error("Plot data chunk upload error: {}".format(e))
             return False
 
-    def upload_plot_data(self, gdb_data, survey_unit_info, file_name):
+    def upload_plot_data(self, gdb_data, survey_unit_info, file_name, debug=False):
         """Upload plot data in chunks"""
         try:
             features = gdb_data.get('features', []) if isinstance(gdb_data, dict) else []
@@ -300,7 +319,7 @@ class NakshaUploader:
             print("    Uploading {} chunks of plot data...".format(len(chunks)))
 
             for i, chunk in enumerate(chunks):
-                success = self._upload_plot_chunk(chunk, survey_unit_info, file_name, wkid)
+                success = self._upload_plot_chunk(chunk, survey_unit_info, file_name, wkid, debug)
                 if not success:
                     print_error("    FAILED: Plot data chunk {}".format(i + 1))
                     return False
@@ -590,7 +609,7 @@ class NakAPI(NakBaseAPI):
             print_error("Error fetching survey unit details for ULB {}: {}".format(ulb_id, e))
             return []
 
-    def upload_plot_data(self, gdb_data, survey_unit_info, file_name):
+    def upload_plot_data(self, gdb_data, survey_unit_info, file_name, debug=False):
         """Upload plot data in chunks (reference implementation)"""
         try:
             if not self.auth.auth_token:
@@ -616,7 +635,7 @@ class NakAPI(NakBaseAPI):
             print("    Uploading {} chunks of plot data...".format(len(chunks)))
 
             for i, chunk in enumerate(chunks):
-                success = self._upload_plot_chunk(chunk, survey_unit_info, file_name, wkid)
+                success = self._upload_plot_chunk(chunk, survey_unit_info, file_name, wkid, debug)
                 if not success:
                     print_error("    FAILED: Plot data chunk {}".format(i + 1))
                     return False

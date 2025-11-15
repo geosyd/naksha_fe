@@ -234,7 +234,7 @@ class BatchOps:
             return False
 
     @staticmethod
-    def _upload_single_gdb(api, gdb_path, survey_data, survey_unit_code, hierarchical_data, backup_uploaded=None):
+    def _upload_single_gdb(api, gdb_path, survey_data, survey_unit_code, hierarchical_data, backup_uploaded=None, debug=False):
         """Upload a single GDB file"""
         try:
             print("    Uploading: {}".format(survey_unit_code))
@@ -286,7 +286,7 @@ class BatchOps:
                 return False
 
             if gdb_data and isinstance(gdb_data, dict) and parcel_count > 0:
-                if not api.upload_plot_data(gdb_data, survey_data, file_name):
+                if not api.upload_plot_data(gdb_data, survey_data, file_name, debug=debug):
                     print_error("    FAILED: Plot data upload")
                     # Clean up zip file on failure
                     FileOps.safe_remove_file(zip_path)

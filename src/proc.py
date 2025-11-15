@@ -257,7 +257,7 @@ class DataWorkflows:
             return False
 
     @staticmethod
-    def process_upload_column(codes_path, gdb_folder, cred=None, count=None, backup_uploaded=None, force=False):
+    def process_upload_column(codes_path, gdb_folder, cred=None, count=None, backup_uploaded=None, force=False, debug=False):
         """Process upload all GDB files in folder"""
         try:
             print("=== PROCESS UPLOAD COLUMN ===")
@@ -362,7 +362,7 @@ class DataWorkflows:
                         print("    Proceeding with upload...")
 
                 # Upload GDB
-                success = BatchOps._upload_single_gdb(api, gdb_path, survey_data, survey_unit, hierarchical_data, backup_uploaded)
+                success = BatchOps._upload_single_gdb(api, gdb_path, survey_data, survey_unit, hierarchical_data, backup_uploaded, debug=debug)
 
                 result = {
                     'survey_unit': survey_unit,
